@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">TouchShield</string>
+    <string name="tile_label">टच लॉक</string>
+    <string name="notification_channel_name">TouchShield सुरक्षा</string>
+    <string name="notification_channel_desc">सक्रिय टच लॉक ओवरले और पॉकेट डिटेक्शन सेवा नियंत्रित करता है</string>
+    <string name="widget_label">त्वरित टच लॉक</string>
+    <string name="widget_tap_lock">टच लॉक</string>
+    <string name="widget_locked">लॉक</string>
+    <string name="widget_armed">सक्रिय</string>
+    <string name="shortcut_lock_short">स्क्रीन लॉक</string>
+    <string name="shortcut_lock_long">अभी स्क्रीन टच लॉक करें</string>
+    <string name="shortcut_pocket_short">पॉकेट गार्ड</string>
+    <string name="shortcut_pocket_long">पॉकेट ऑटो-लॉक बदलें</string>
+</resources>

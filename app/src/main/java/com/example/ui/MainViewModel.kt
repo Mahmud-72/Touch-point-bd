@@ -2,10 +2,14 @@ package com.example.ui
 
 import android.Manifest
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
@@ -15,6 +19,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.AppLanguage
 import com.example.data.BadgeVisibilityMode
 import com.example.data.BorderColorOption
+import com.example.data.BorderStyle
 import com.example.data.BorderThickness
 import com.example.data.BubbleSize
 import com.example.data.BubbleStyle
@@ -25,16 +30,22 @@ import com.example.data.ShieldRuntimeState
 import com.example.data.ShieldSettings
 import com.example.data.ShieldStateHolder
 import com.example.data.SmartPreset
+import com.example.data.ThemeMode
 import com.example.data.UnlockMethod
 import com.example.sensor.PocketSensorManager
 import com.example.service.TouchShieldService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class PermissionStatus(
     val hasOverlayPermission: Boolean = false,
@@ -57,11 +68,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val permissionFlow = MutableStateFlow(readPermissions())
     private val sandboxOpenFlow = MutableStateFlow(false)
 
+    private val _snackbarEvents = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val snackbarEvents: SharedFlow<String> = _snackbarEvents.asSharedFlow()
+
+    private var lastLandscape = false
+    private var lastCharging = false
+
     private val previewSensorManager = PocketSensorManager(
         context = appContext,
         onPocketLockTriggered = {},
         onPocketUnlockTriggered = {}
     )
+
+    private val batteryPreviewReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            updateBatteryFromIntent(intent)
+        }
+    }
 
     val uiState: StateFlow<MainUiState> = combine(
         preferences.settingsFlow,
@@ -83,13 +106,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         previewSensorManager.startListening()
+        refreshContextSnapshot()
+        runCatching {
+            val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            val sticky = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                appContext.registerReceiver(batteryPreviewReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                appContext.registerReceiver(batteryPreviewReceiver, filter)
+            }
+            updateBatteryFromIntent(sticky)
+        }
         viewModelScope.launch {
             preferences.settingsFlow.collectLatest { settings ->
                 previewSensorManager.updateConfig(
                     autoLock = false,
                     autoUnlock = false,
                     debounceMs = settings.pocketDebounceMs,
-                    orientationFilter = settings.pocketOrientationFilterEnabled
+                    orientationFilter = settings.pocketOrientationFilterEnabled,
+                    pauseLandscape = settings.pausePocketInLandscape,
+                    pauseCharging = settings.pausePocketWhileCharging,
+                    flipFaceDown = false
                 )
             }
         }
@@ -97,11 +133,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         previewSensorManager.stopListening()
+        runCatching { appContext.unregisterReceiver(batteryPreviewReceiver) }
         super.onCleared()
     }
 
     fun refreshPermissions() {
         permissionFlow.value = readPermissions()
+        refreshContextSnapshot()
+    }
+
+    fun refreshContextSnapshot() {
+        val landscape = appContext.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        lastLandscape = landscape
+        ShieldStateHolder.updateDeviceContext(isLandscape = landscape)
+        previewSensorManager.updateContextState(lastLandscape, lastCharging)
+    }
+
+    private fun updateBatteryFromIntent(intent: Intent?) {
+        if (intent == null) return
+        val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+        val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+        val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == BatteryManager.BATTERY_STATUS_FULL ||
+            plugged != 0
+        val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
+        val pct = if (level >= 0) ((level * 100f) / scale).toInt().coerceIn(0, 100) else 100
+        lastCharging = charging
+        ShieldStateHolder.updateDeviceContext(
+            isLandscape = lastLandscape,
+            isCharging = charging,
+            batteryPercent = pct
+        )
+        previewSensorManager.updateContextState(lastLandscape, lastCharging)
     }
 
     fun toggleServiceArmed() {
@@ -128,7 +192,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         TouchShieldService.lockScreenNow(appContext, LockSource.MANUAL_APP)
     }
 
-    // Unlock & Security
+    // Security & Unlock
     fun setUnlockMethod(method: UnlockMethod) {
         viewModelScope.launch { preferences.setUnlockMethod(method) }
     }
@@ -141,6 +205,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { preferences.setUnlockPin(pin) }
     }
 
+    fun setBiometricUnlock(enabled: Boolean) {
+        viewModelScope.launch { preferences.setBiometricUnlock(enabled) }
+    }
+
+    fun setEmergencyHoldBypass(enabled: Boolean) {
+        viewModelScope.launch { preferences.setEmergencyHoldBypass(enabled) }
+    }
+
     fun setLockCountdownSeconds(seconds: Int) {
         viewModelScope.launch { preferences.setLockCountdownSeconds(seconds) }
     }
@@ -149,13 +221,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { preferences.setHudTimeoutMs(ms) }
     }
 
-    // Overlay Visuals
+    // Overlay Visuals & Display
     fun setOverlayStyle(style: OverlayStyle) {
         viewModelScope.launch { preferences.setOverlayStyle(style) }
     }
 
     fun setCustomDimPercent(percent: Int) {
         viewModelScope.launch { preferences.setCustomDimPercent(percent) }
+    }
+
+    fun setLockBrightnessPercent(percent: Int) {
+        viewModelScope.launch { preferences.setLockBrightnessPercent(percent) }
     }
 
     fun setBorderEnabled(enabled: Boolean) {
@@ -170,8 +246,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { preferences.setBorderThickness(thickness) }
     }
 
+    fun setBorderStyle(style: BorderStyle) {
+        viewModelScope.launch { preferences.setBorderStyle(style) }
+    }
+
+    fun setBorderPulse(enabled: Boolean) {
+        viewModelScope.launch { preferences.setBorderPulse(enabled) }
+    }
+
     fun setBadgeVisibilityMode(mode: BadgeVisibilityMode) {
         viewModelScope.launch { preferences.setBadgeVisibilityMode(mode) }
+    }
+
+    fun setOledClockEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setOledClockEnabled(enabled) }
     }
 
     // Floating Bubble
@@ -199,7 +287,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { preferences.setBubbleDoubleTapHide(enabled) }
     }
 
-    // Pocket Sensor & Automation
+    // Pocket Sensor & Context Automation
     fun setPocketAutoLock(enabled: Boolean) {
         viewModelScope.launch { preferences.setPocketAutoLock(enabled) }
     }
@@ -216,15 +304,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { preferences.setPocketOrientationFilter(enabled) }
     }
 
+    fun setPausePocketInLandscape(enabled: Boolean) {
+        viewModelScope.launch { preferences.setPausePocketInLandscape(enabled) }
+    }
+
+    fun setPausePocketWhileCharging(enabled: Boolean) {
+        viewModelScope.launch { preferences.setPausePocketWhileCharging(enabled) }
+    }
+
+    fun setFlipFaceDownLock(enabled: Boolean) {
+        viewModelScope.launch { preferences.setFlipFaceDownLock(enabled) }
+    }
+
     fun setAutoUnlockOnCall(enabled: Boolean) {
         viewModelScope.launch { preferences.setAutoUnlockOnCall(enabled) }
+    }
+
+    fun setReLockAfterCall(enabled: Boolean) {
+        viewModelScope.launch { preferences.setReLockAfterCall(enabled) }
     }
 
     fun setSessionTimerMinutes(minutes: Int) {
         viewModelScope.launch { preferences.setSessionTimerMinutes(minutes) }
     }
 
-    // System & Presets
+    // System, Appearance, Onboarding & Profiles
     fun setKeepScreenOn(enabled: Boolean) {
         viewModelScope.launch { preferences.setKeepScreenOn(enabled) }
     }
@@ -237,21 +341,77 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { preferences.setAutoStartOnBoot(enabled) }
     }
 
-    fun setDarkTheme(enabled: Boolean) {
-        viewModelScope.launch { preferences.setDarkTheme(enabled) }
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch { preferences.setThemeMode(mode) }
     }
 
-    fun toggleLanguage() {
-        val next = if (uiState.value.settings.appLanguage == AppLanguage.BENGALI) {
-            AppLanguage.ENGLISH
-        } else {
-            AppLanguage.BENGALI
-        }
-        viewModelScope.launch { preferences.setAppLanguage(next) }
+    fun setDynamicColorEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setDynamicColorEnabled(enabled) }
+    }
+
+    fun setAppLanguage(language: AppLanguage) {
+        viewModelScope.launch { preferences.setAppLanguage(language) }
+    }
+
+    fun completeOnboarding() {
+        viewModelScope.launch { preferences.setOnboardingCompleted(true) }
+    }
+
+    fun replayOnboarding() {
+        viewModelScope.launch { preferences.setOnboardingCompleted(false) }
     }
 
     fun applySmartPreset(preset: SmartPreset) {
         viewModelScope.launch { preferences.applySmartPreset(preset) }
+    }
+
+    fun saveCurrentAsProfile(name: String) {
+        viewModelScope.launch { preferences.saveCurrentAsProfile(name) }
+    }
+
+    fun applyCustomProfile(profileId: String) {
+        viewModelScope.launch { preferences.applyCustomProfile(profileId) }
+    }
+
+    fun renameCustomProfile(profileId: String, newName: String) {
+        viewModelScope.launch { preferences.renameCustomProfile(profileId, newName) }
+    }
+
+    fun deleteCustomProfile(profileId: String) {
+        viewModelScope.launch { preferences.deleteCustomProfile(profileId) }
+    }
+
+    fun exportBackupToUri(uri: Uri) {
+        viewModelScope.launch {
+            val strings = getAppStrings(uiState.value.settings.appLanguage)
+            val success = withContext(Dispatchers.IO) {
+                runCatching {
+                    val json = preferences.exportSettingsJson()
+                    appContext.contentResolver.openOutputStream(uri)?.use { out ->
+                        out.write(json.toByteArray(Charsets.UTF_8))
+                    } ?: error("Null output stream")
+                }.isSuccess
+            }
+            _snackbarEvents.tryEmit(if (success) strings.backupExportSuccess else strings.backupError)
+        }
+    }
+
+    fun importBackupFromUri(uri: Uri) {
+        viewModelScope.launch {
+            val strings = getAppStrings(uiState.value.settings.appLanguage)
+            val raw = withContext(Dispatchers.IO) {
+                runCatching {
+                    appContext.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use {
+                        it.readText()
+                    }
+                }.getOrNull()
+            }
+            val imported = if (!raw.isNullOrBlank()) preferences.importSettingsJson(raw) else false
+            val updatedStrings = getAppStrings(uiState.value.settings.appLanguage)
+            _snackbarEvents.tryEmit(
+                if (imported) updatedStrings.backupImportSuccess else strings.backupError
+            )
+        }
     }
 
     fun resetStats() {

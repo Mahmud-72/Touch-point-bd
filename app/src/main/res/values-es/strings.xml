@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">TouchShield</string>
+    <string name="tile_label">Bloqueo Táctil</string>
+    <string name="notification_channel_name">Protección TouchShield</string>
+    <string name="notification_channel_desc">Controla la capa de bloqueo táctil y el sensor de bolsillo</string>
+    <string name="widget_label">Bloqueo Táctil Rápido</string>
+    <string name="widget_tap_lock">Bloqueo</string>
+    <string name="widget_locked">Bloqueado</string>
+    <string name="widget_armed">Activo</string>
+    <string name="shortcut_lock_short">Bloquear</string>
+    <string name="shortcut_lock_long">Bloquear pantalla ahora</string>
+    <string name="shortcut_pocket_short">Modo Bolsillo</string>
+    <string name="shortcut_pocket_long">Alternar bloqueo de bolsillo</string>
+</resources>

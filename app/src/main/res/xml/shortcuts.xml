@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="lock_now"
+        android:enabled="true"
+        android:icon="@drawable/ic_shield_lock"
+        android:shortcutShortLabel="@string/shortcut_lock_short"
+        android:shortcutLongLabel="@string/shortcut_lock_long">
+        <intent
+            android:action="com.example.action.SHORTCUT_LOCK"
+            android:targetPackage="com.example"
+            android:targetClass="com.example.service.ShortcutActionActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="toggle_pocket"
+        android:enabled="true"
+        android:icon="@drawable/ic_shield_lock"
+        android:shortcutShortLabel="@string/shortcut_pocket_short"
+        android:shortcutLongLabel="@string/shortcut_pocket_long">
+        <intent
+            android:action="com.example.action.SHORTCUT_TOGGLE_POCKET"
+            android:targetPackage="com.example"
+            android:targetClass="com.example.service.ShortcutActionActivity" />
+    </shortcut>
+</shortcuts>

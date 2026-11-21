@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">TouchShield</string>
+    <string name="tile_label">قفل اللمس</string>
+    <string name="notification_channel_name">حماية TouchShield</string>
+    <string name="notification_channel_desc">يتحكم في طبقة قفل اللمس واكتشاف الجيب التلقائي</string>
+    <string name="widget_label">قفل اللمس السريع</string>
+    <string name="widget_tap_lock">قفل اللمس</string>
+    <string name="widget_locked">مقفل</string>
+    <string name="widget_armed">جاهز</string>
+    <string name="shortcut_lock_short">قفل الشاشة</string>
+    <string name="shortcut_lock_long">قفل لمس الشاشة الآن</string>
+    <string name="shortcut_pocket_short">حماية الجيب</string>
+    <string name="shortcut_pocket_long">تبديل قفل الجيب التلقائي</string>
+</resources>

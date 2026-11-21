@@ -88,11 +88,30 @@ object ShieldStateHolder {
         }
     }
 
-    fun updateOrientationReading(isFlatFaceUp: Boolean, isPocketOrientationValid: Boolean) {
+    fun updateOrientationReading(
+        isFlatFaceUp: Boolean,
+        isFaceDown: Boolean,
+        isPocketOrientationValid: Boolean
+    ) {
         _runtimeState.update {
             it.copy(
                 isFlatFaceUp = isFlatFaceUp,
+                isFaceDown = isFaceDown,
                 isPocketOrientationValid = isPocketOrientationValid
+            )
+        }
+    }
+
+    fun updateDeviceContext(
+        isLandscape: Boolean? = null,
+        isCharging: Boolean? = null,
+        batteryPercent: Int? = null
+    ) {
+        _runtimeState.update { current ->
+            current.copy(
+                isLandscape = isLandscape ?: current.isLandscape,
+                isCharging = isCharging ?: current.isCharging,
+                batteryPercent = batteryPercent ?: current.batteryPercent
             )
         }
     }

@@ -3,4 +3,12 @@
     <string name="tile_label">Touch Lock</string>
     <string name="notification_channel_name">TouchShield Protection</string>
     <string name="notification_channel_desc">Controls active touch lock overlay and pocket detection service</string>
+    <string name="widget_label">Quick Touch Lock</string>
+    <string name="widget_tap_lock">Touch Lock</string>
+    <string name="widget_locked">Locked</string>
+    <string name="widget_armed">Armed</string>
+    <string name="shortcut_lock_short">Lock Screen</string>
+    <string name="shortcut_lock_long">Lock Screen Touch Now</string>
+    <string name="shortcut_pocket_short">Pocket Guard</string>
+    <string name="shortcut_pocket_long">Toggle Pocket Auto-Lock</string>
 </resources>

@@ -3,14 +3,18 @@ package com.example.service
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -34,10 +38,14 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.example.R
 import com.example.data.BadgeVisibilityMode
+import com.example.data.BorderStyle
 import com.example.data.BubbleStyle
 import com.example.data.ShieldSettings
 import com.example.data.UnlockMethod
 import com.example.ui.getAppStrings
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.abs
 
 class OverlayWindowController(
@@ -46,6 +54,7 @@ class OverlayWindowController(
     private val onBubbleDoubleTapHidden: () -> Unit,
     private val onCountdownCancelled: () -> Unit,
     private val onTouchBlocked: () -> Unit,
+    private val onBiometricRequested: () -> Unit,
     private val onUnlockTriggered: () -> Unit
 ) {
     private val overlayContext: Context = ContextThemeWrapper(
@@ -62,6 +71,7 @@ class OverlayWindowController(
     private var lastBubbleSizeKey: String? = null
     private var lastBubbleStyleKey: String? = null
     private var lastBubbleColorArgb: Int? = null
+    private var lastBubbleLangKey: String? = null
     private var bubbleTuckRunnable: Runnable? = null
     private var pendingSingleTapRunnable: Runnable? = null
     private var lastBubbleTapTime = 0L
@@ -72,7 +82,12 @@ class OverlayWindowController(
     private var lockOverlayParams: WindowManager.LayoutParams? = null
     private var unlockHudContainer: LinearLayout? = null
     private var statusBadgePill: TextView? = null
-    private var borderFrameView: View? = null
+    private var borderFrameView: BorderOverlayView? = null
+    private var borderPulseAnimator: ValueAnimator? = null
+    private var oledClockContainer: LinearLayout? = null
+    private var oledClockText: TextView? = null
+    private var oledBatteryText: TextView? = null
+    private var oledClockRunnable: Runnable? = null
     private var hideHudRunnable: Runnable? = null
 
     private var currentSettings = ShieldSettings()
@@ -102,7 +117,8 @@ class OverlayWindowController(
             if (isServiceArmed && settings.floatingBubbleEnabled && !isBubbleTemporarilyHidden) {
                 val styleChanged = lastBubbleSizeKey != settings.bubbleSize.storageKey ||
                     lastBubbleStyleKey != settings.bubbleStyle.storageKey ||
-                    lastBubbleColorArgb != settings.borderColor.colorArgb
+                    lastBubbleColorArgb != settings.borderColor.colorArgb ||
+                    lastBubbleLangKey != settings.appLanguage.storageKey
                 if (bubbleView == null) {
                     showFloatingBubble()
                 } else if (styleChanged) {
@@ -219,11 +235,20 @@ class OverlayWindowController(
             isFocusable = false
         }
 
-        // 1. Edge Glow Border
-        val borderView = View(overlayContext).apply {
-            applyBorderDrawable(this)
+        // 1. Edge Border View (Full Glow OR Corner Brackets + Optional Pulse)
+        val borderView = BorderOverlayView(overlayContext).apply {
+            configure(
+                color = applyAlpha(currentSettings.borderColor.colorArgb, 0xCC),
+                strokeWidthPx = TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP,
+                    currentSettings.borderThickness.dpValue,
+                    overlayContext.resources.displayMetrics
+                ),
+                cornerRadiusPx = dp(18).toFloat(),
+                style = currentSettings.borderStyle
+            )
             visibility = if (currentSettings.borderEnabled) View.VISIBLE else View.GONE
-            alpha = 0.95f
+            alpha = 0.85f
         }
         root.addView(
             borderView,
@@ -231,14 +256,47 @@ class OverlayWindowController(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             ).apply {
-                setMargins(dp(2), dp(2), dp(2), dp(2))
+                setMargins(dp(4), dp(4), dp(4), dp(4))
             }
         )
-        if (currentSettings.borderEnabled) {
-            borderView.animate().alpha(0.55f).setStartDelay(800L).setDuration(450L).start()
-        }
 
-        // 2. Top Status Badge
+        // 2. OLED Clock & Battery Info Overlay (Subtle centered HUD)
+        val oledBox = LinearLayout(overlayContext).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(22), dp(14), dp(22), dp(14))
+            background = GradientDrawable().apply {
+                setColor(0x6605080E)
+                cornerRadius = dp(20).toFloat()
+            }
+            visibility = if (currentSettings.oledClockEnabled) View.VISIBLE else View.GONE
+            alpha = 0.78f
+        }
+        val clockTv = TextView(overlayContext).apply {
+            setTextColor(0xFFE2E8F0.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 36f)
+            typeface = Typeface.MONOSPACE
+            gravity = Gravity.CENTER
+        }
+        val batteryTv = TextView(overlayContext).apply {
+            setTextColor(currentSettings.borderColor.colorArgb)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+        }
+        oledBox.addView(clockTv)
+        oledBox.addView(batteryTv)
+        root.addView(
+            oledBox,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER
+            }
+        )
+
+        // 3. Top Status Badge
         val topBadge = TextView(overlayContext).apply {
             text = "🔒 ${strings.overlayTouchBlockedTitle}"
             setTextColor(0xFFFFFFFF.toInt())
@@ -268,7 +326,7 @@ class OverlayWindowController(
             }
         )
 
-        // 3. Bottom Unlock HUD
+        // 4. Bottom Unlock HUD
         val hudContainer = LinearLayout(overlayContext).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
@@ -295,7 +353,7 @@ class OverlayWindowController(
             setTextColor(0xFFCBD5E1.toInt())
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             gravity = Gravity.CENTER
-            setPadding(0, dp(4), 0, dp(14))
+            setPadding(0, dp(4), 0, dp(12))
         }
 
         hudContainer.addView(titleView)
@@ -323,7 +381,7 @@ class OverlayWindowController(
         root.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_DOWN) {
                 onTouchBlocked()
-                if (currentSettings.borderEnabled) {
+                if (currentSettings.borderEnabled && !currentSettings.borderPulseEnabled) {
                     borderView.animate().cancel()
                     borderView.alpha = 0.95f
                     borderView.animate().alpha(0.55f).setDuration(600L).start()
@@ -341,6 +399,12 @@ class OverlayWindowController(
             unlockHudContainer = hudContainer
             statusBadgePill = topBadge
             borderFrameView = borderView
+            oledClockContainer = oledBox
+            oledClockText = clockTv
+            oledBatteryText = batteryTv
+
+            startOrStopBorderPulse()
+            startOrStopOledClockTicker()
             scheduleHudHide(currentSettings.hudTimeoutMs)
         } catch (_: Exception) {
             lockOverlayView = null
@@ -350,6 +414,8 @@ class OverlayWindowController(
     fun hideTouchLockOverlay() {
         hideHudRunnable?.let { handler.removeCallbacks(it) }
         hideHudRunnable = null
+        stopBorderPulse()
+        stopOledClockTicker()
         lockOverlayView?.let { view ->
             try {
                 windowManager.removeView(view)
@@ -361,15 +427,19 @@ class OverlayWindowController(
         unlockHudContainer = null
         statusBadgePill = null
         borderFrameView = null
+        oledClockContainer = null
+        oledClockText = null
+        oledBatteryText = null
     }
 
     @SuppressLint("ClickableViewAccessibility")
     fun showFloatingBubble() {
         if (!canDrawOverlays() || bubbleView != null) return
 
+        val strings = getAppStrings(currentSettings.appLanguage)
         val sizeDp = currentSettings.bubbleSize.dpSize
         val widthPx = when (currentSettings.bubbleStyle) {
-            BubbleStyle.COMPACT_PILL -> dp((sizeDp * 1.45f).toInt())
+            BubbleStyle.COMPACT_PILL -> dp((sizeDp * 1.48f).toInt())
             BubbleStyle.MINIMAL_DOT -> dp((sizeDp * 0.78f).toInt())
             BubbleStyle.SHIELD_CIRCLE -> dp(sizeDp)
         }
@@ -424,10 +494,10 @@ class OverlayWindowController(
                     setImageDrawable(ContextCompat.getDrawable(overlayContext, R.drawable.ic_shield_lock))
                     setColorFilter(borderColor)
                 }
-                val iconSize = (heightPx * 0.52f).toInt()
+                val iconSize = (heightPx * 0.50f).toInt()
                 row.addView(icon, LinearLayout.LayoutParams(iconSize, iconSize))
                 val label = TextView(overlayContext).apply {
-                    text = "LOCK"
+                    text = strings.bubblePillLabel
                     setTextColor(0xFF0F172A.toInt())
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
                     typeface = Typeface.DEFAULT_BOLD
@@ -449,7 +519,7 @@ class OverlayWindowController(
                     setColorFilter(borderColor)
                     val pad = (sizeDp * 0.24f).toInt()
                     setPadding(dp(pad), dp(pad), dp(pad), dp(pad))
-                    contentDescription = getAppStrings(currentSettings.appLanguage).btnLockScreenNow
+                    contentDescription = strings.btnLockScreenNow
                 }
                 container.addView(
                     icon,
@@ -544,6 +614,7 @@ class OverlayWindowController(
             lastBubbleSizeKey = currentSettings.bubbleSize.storageKey
             lastBubbleStyleKey = currentSettings.bubbleStyle.storageKey
             lastBubbleColorArgb = currentSettings.borderColor.colorArgb
+            lastBubbleLangKey = currentSettings.appLanguage.storageKey
             scheduleBubbleAutoTuck()
         } catch (_: Exception) {
             bubbleView = null
@@ -628,9 +699,23 @@ class OverlayWindowController(
         view.setBackgroundColor(overlayBackgroundColor())
 
         borderFrameView?.let { border ->
-            applyBorderDrawable(border)
+            border.configure(
+                color = applyAlpha(currentSettings.borderColor.colorArgb, 0xCC),
+                strokeWidthPx = TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP,
+                    currentSettings.borderThickness.dpValue,
+                    overlayContext.resources.displayMetrics
+                ),
+                cornerRadiusPx = dp(18).toFloat(),
+                style = currentSettings.borderStyle
+            )
             border.visibility = if (currentSettings.borderEnabled) View.VISIBLE else View.GONE
+            startOrStopBorderPulse()
         }
+
+        oledClockContainer?.visibility = if (currentSettings.oledClockEnabled) View.VISIBLE else View.GONE
+        oledBatteryText?.setTextColor(currentSettings.borderColor.colorArgb)
+        startOrStopOledClockTicker()
 
         statusBadgePill?.visibility = when (currentSettings.badgeVisibilityMode) {
             BadgeVisibilityMode.ALWAYS -> View.VISIBLE
@@ -647,6 +732,7 @@ class OverlayWindowController(
         }
         params.flags = params.flags and WindowManager.LayoutParams.FLAG_DIM_BEHIND.inv()
         params.dimAmount = 0f
+        params.screenBrightness = resolveOverlayBrightness()
 
         try {
             windowManager.updateViewLayout(view, params)
@@ -654,17 +740,70 @@ class OverlayWindowController(
         }
     }
 
-    private fun applyBorderDrawable(view: View) {
-        val strokePx = TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP,
-            currentSettings.borderThickness.dpValue,
-            overlayContext.resources.displayMetrics
-        ).toInt().coerceAtLeast(1)
-        view.background = GradientDrawable().apply {
-            setColor(Color.TRANSPARENT)
-            setStroke(strokePx, applyAlpha(currentSettings.borderColor.colorArgb, 0xCC))
-            cornerRadius = dp(18).toFloat()
+    private fun resolveOverlayBrightness(): Float {
+        val percent = currentSettings.lockBrightnessPercent
+        return if (percent < 0) {
+            WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        } else {
+            (percent / 100f).coerceIn(0.01f, 1.0f)
         }
+    }
+
+    private fun startOrStopBorderPulse() {
+        stopBorderPulse()
+        val border = borderFrameView ?: return
+        if (!currentSettings.borderEnabled) return
+        if (!currentSettings.borderPulseEnabled) {
+            border.alpha = 0.72f
+            return
+        }
+        borderPulseAnimator = ValueAnimator.ofFloat(0.40f, 0.96f).apply {
+            duration = 1600L
+            repeatMode = ValueAnimator.REVERSE
+            repeatCount = ValueAnimator.INFINITE
+            addUpdateListener { anim ->
+                border.alpha = anim.animatedValue as Float
+            }
+            start()
+        }
+    }
+
+    private fun stopBorderPulse() {
+        borderPulseAnimator?.cancel()
+        borderPulseAnimator = null
+    }
+
+    private fun startOrStopOledClockTicker() {
+        stopOledClockTicker()
+        if (!currentSettings.oledClockEnabled) return
+        val runnable = object : Runnable {
+            override fun run() {
+                updateOledClockNow()
+                handler.postDelayed(this, 20_000L)
+            }
+        }
+        oledClockRunnable = runnable
+        updateOledClockNow()
+        handler.postDelayed(runnable, 20_000L)
+    }
+
+    private fun stopOledClockTicker() {
+        oledClockRunnable?.let { handler.removeCallbacks(it) }
+        oledClockRunnable = null
+    }
+
+    private fun updateOledClockNow() {
+        val timeText = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+        oledClockText?.text = timeText
+        val pct = readBatteryPercent()
+        oledBatteryText?.text = "$pct%"
+    }
+
+    private fun readBatteryPercent(): Int {
+        val status = overlayContext.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = status?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = status?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
+        return if (level >= 0 && scale > 0) ((level * 100f) / scale).toInt().coerceIn(0, 100) else 100
     }
 
     private fun createLockLayoutParams(): WindowManager.LayoutParams {
@@ -686,6 +825,7 @@ class OverlayWindowController(
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             dimAmount = 0f
+            screenBrightness = resolveOverlayBrightness()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
@@ -916,6 +1056,7 @@ class OverlayWindowController(
         return button
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private fun createPinUnlockView(hintView: TextView): View {
         val strings = getAppStrings(currentSettings.appLanguage)
         val accent = currentSettings.borderColor.colorArgb
@@ -929,13 +1070,13 @@ class OverlayWindowController(
         val dotsRow = LinearLayout(overlayContext).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(10))
+            setPadding(0, 0, 0, dp(8))
         }
 
         val dotViews = List(4) {
             View(overlayContext).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(12), dp(12)).apply {
-                    setMargins(dp(6), 0, dp(6), 0)
+                layoutParams = LinearLayout.LayoutParams(dp(11), dp(11)).apply {
+                    setMargins(dp(5), 0, dp(5), 0)
                 }
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
@@ -955,33 +1096,34 @@ class OverlayWindowController(
             }
         }
 
+        val isLandscape = overlayContext.resources.configuration.orientation ==
+            Configuration.ORIENTATION_LANDSCAPE
+
         val grid = GridLayout(overlayContext).apply {
             columnCount = 3
             rowCount = 4
         }
 
-        val isLandscape = overlayContext.resources.configuration.orientation ==
-            Configuration.ORIENTATION_LANDSCAPE
         val keys = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "⌫")
         keys.forEach { key ->
             val btn = TextView(overlayContext).apply {
                 text = key
                 setTextColor(0xFFF8FAFC.toInt())
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isLandscape) 14f else 16f)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isLandscape) 14f else 15f)
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
                 layoutParams = GridLayout.LayoutParams().apply {
-                    width = dp(if (isLandscape) 52 else 58)
-                    height = dp(if (isLandscape) 36 else 44)
-                    setMargins(dp(4), dp(3), dp(4), dp(3))
+                    width = dp(if (isLandscape) 50 else 56)
+                    height = dp(if (isLandscape) 33 else 41)
+                    setMargins(dp(3), dp(3), dp(3), dp(3))
                 }
                 background = GradientDrawable().apply {
                     setColor(0xFF1E293B.toInt())
-                    cornerRadius = dp(12).toFloat()
+                    cornerRadius = dp(10).toFloat()
                     setStroke(dp(1), 0x3394A3B8)
                 }
                 setOnClickListener {
-                    revealHudTemporarily(5000L)
+                    revealHudTemporarily(maxOf(currentSettings.hudTimeoutMs, 5000L))
                     triggerHaptic(light = true)
                     when (key) {
                         "C" -> {
@@ -1022,6 +1164,99 @@ class OverlayWindowController(
             grid.addView(btn)
         }
         wrapper.addView(grid)
+
+        if (currentSettings.biometricUnlockEnabled || currentSettings.emergencyHoldBypassEnabled) {
+            val recoveryRow = LinearLayout(overlayContext).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                setPadding(0, dp(8), 0, 0)
+            }
+
+            if (currentSettings.biometricUnlockEnabled) {
+                val bioBtn = TextView(overlayContext).apply {
+                    text = strings.overlayBtnBiometric
+                    setTextColor(accent)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                    typeface = Typeface.DEFAULT_BOLD
+                    setPadding(dp(12), dp(7), dp(12), dp(7))
+                    background = GradientDrawable().apply {
+                        setColor(0xFF172030.toInt())
+                        cornerRadius = dp(50).toFloat()
+                        setStroke(dp(1), applyAlpha(accent, 0x80))
+                    }
+                    setOnClickListener {
+                        triggerHaptic(light = true)
+                        onBiometricRequested()
+                    }
+                }
+                recoveryRow.addView(bioBtn)
+            }
+
+            if (currentSettings.emergencyHoldBypassEnabled) {
+                if (currentSettings.biometricUnlockEnabled) {
+                    recoveryRow.addView(
+                        View(overlayContext).apply {
+                            layoutParams = LinearLayout.LayoutParams(dp(8), dp(1))
+                        }
+                    )
+                }
+                val emergencyBtn = TextView(overlayContext).apply {
+                    text = strings.overlayEmergencyHoldLabel
+                    setTextColor(0xFFFBBF24.toInt())
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                    typeface = Typeface.DEFAULT_BOLD
+                    setPadding(dp(12), dp(7), dp(12), dp(7))
+                    background = GradientDrawable().apply {
+                        setColor(0xFF2B2110.toInt())
+                        cornerRadius = dp(50).toFloat()
+                        setStroke(dp(1), 0x88F59E0B.toInt())
+                    }
+                }
+                var bypassAnim: ValueAnimator? = null
+                var bypassed = false
+                emergencyBtn.setOnTouchListener { v, event ->
+                    when (event.action) {
+                        MotionEvent.ACTION_DOWN -> {
+                            bypassed = false
+                            cancelScheduledHudHide()
+                            revealHudTemporarily(7000L)
+                            v.alpha = 0.7f
+                            bypassAnim?.cancel()
+                            bypassAnim = ValueAnimator.ofFloat(0f, 1f).apply {
+                                duration = 5000L
+                                addUpdateListener { anim ->
+                                    val p = anim.animatedValue as Float
+                                    emergencyBtn.text = "${strings.overlayEmergencyHoldLabel} (${(p * 100).toInt()}%)"
+                                    if (p >= 1f && !bypassed) {
+                                        bypassed = true
+                                        triggerHaptic(light = false)
+                                        onUnlockTriggered()
+                                    }
+                                }
+                                start()
+                            }
+                            true
+                        }
+
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                            v.alpha = 1f
+                            if (!bypassed) {
+                                bypassAnim?.cancel()
+                                emergencyBtn.text = strings.overlayEmergencyHoldLabel
+                                scheduleHudHide(currentSettings.hudTimeoutMs)
+                            }
+                            true
+                        }
+
+                        else -> true
+                    }
+                }
+                recoveryRow.addView(emergencyBtn)
+            }
+
+            wrapper.addView(recoveryRow)
+        }
+
         return wrapper
     }
 
@@ -1154,6 +1389,65 @@ class OverlayWindowController(
             value,
             overlayContext.resources.displayMetrics
         ).toInt()
+
+    private class BorderOverlayView(context: Context) : View(context) {
+        private var style: BorderStyle = BorderStyle.FULL_GLOW
+        private var cornerRadiusPx: Float = 24f
+        private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+        }
+        private val rect = RectF()
+        private val bracketPath = Path()
+
+        fun configure(
+            color: Int,
+            strokeWidthPx: Float,
+            cornerRadiusPx: Float,
+            style: BorderStyle
+        ) {
+            this.style = style
+            this.cornerRadiusPx = cornerRadiusPx
+            strokePaint.color = color
+            strokePaint.strokeWidth = strokeWidthPx
+            invalidate()
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val half = strokePaint.strokeWidth / 2f
+            rect.set(half, half, width - half, height - half)
+
+            if (style == BorderStyle.FULL_GLOW) {
+                canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, strokePaint)
+            } else {
+                val len = minOf(width, height) * 0.10f
+                val r = cornerRadiusPx
+                bracketPath.reset()
+                // Top-left
+                bracketPath.moveTo(rect.left, rect.top + len)
+                bracketPath.lineTo(rect.left, rect.top + r)
+                bracketPath.quadTo(rect.left, rect.top, rect.left + r, rect.top)
+                bracketPath.lineTo(rect.left + len, rect.top)
+                // Top-right
+                bracketPath.moveTo(rect.right - len, rect.top)
+                bracketPath.lineTo(rect.right - r, rect.top)
+                bracketPath.quadTo(rect.right, rect.top, rect.right, rect.top + r)
+                bracketPath.lineTo(rect.right, rect.top + len)
+                // Bottom-right
+                bracketPath.moveTo(rect.right, rect.bottom - len)
+                bracketPath.lineTo(rect.right, rect.bottom - r)
+                bracketPath.quadTo(rect.right, rect.bottom, rect.right - r, rect.bottom)
+                bracketPath.lineTo(rect.right - len, rect.bottom)
+                // Bottom-left
+                bracketPath.moveTo(rect.left + len, rect.bottom)
+                bracketPath.lineTo(rect.left + r, rect.bottom)
+                bracketPath.quadTo(rect.left, rect.bottom, rect.left, rect.bottom - r)
+                bracketPath.lineTo(rect.left, rect.bottom - len)
+                canvas.drawPath(bracketPath, strokePaint)
+            }
+        }
+    }
 
     private class HoldProgressRingView(
         context: Context,

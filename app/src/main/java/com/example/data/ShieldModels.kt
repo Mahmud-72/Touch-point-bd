@@ -1,5 +1,7 @@
 package com.example.data
 
+import java.util.Locale
+
 enum class UnlockMethod(val storageKey: String) {
     LONG_PRESS("long_press"),
     SLIDE("slide"),
@@ -46,6 +48,16 @@ enum class BorderThickness(val storageKey: String, val dpValue: Float) {
     }
 }
 
+enum class BorderStyle(val storageKey: String) {
+    FULL_GLOW("full_glow"),
+    CORNER_BRACKETS("corner_brackets");
+
+    companion object {
+        fun fromKey(key: String?): BorderStyle =
+            entries.firstOrNull { it.storageKey == key } ?: FULL_GLOW
+    }
+}
+
 enum class BadgeVisibilityMode(val storageKey: String) {
     ALWAYS("always"),
     ON_TOUCH("on_touch"),
@@ -82,16 +94,50 @@ enum class BubbleStyle(val storageKey: String) {
 enum class SmartPreset {
     POCKET_PHOTO,
     KIDS_VIDEO,
-    BATTERY_SAVER
+    BATTERY_SAVER,
+    NAVIGATION_MAP
 }
 
-enum class AppLanguage(val storageKey: String) {
-    ENGLISH("en"),
-    BENGALI("bn");
+enum class ThemeMode(val storageKey: String) {
+    SYSTEM("system"),
+    LIGHT("light"),
+    DARK("dark");
+
+    companion object {
+        fun fromKey(key: String?): ThemeMode =
+            entries.firstOrNull { it.storageKey == key } ?: SYSTEM
+    }
+}
+
+enum class AppLanguage(val storageKey: String, val displayLabel: String) {
+    SYSTEM_AUTO("auto", "Auto (System)"),
+    ENGLISH("en", "English"),
+    BENGALI("bn", "বাংলা"),
+    HINDI("hi", "हिन्दी"),
+    ARABIC("ar", "العربية"),
+    SPANISH("es", "Español"),
+    INDONESIAN("in", "Bahasa Indonesia"),
+    PORTUGUESE("pt", "Português");
+
+    fun resolve(systemLangCode: String = Locale.getDefault().language): AppLanguage {
+        if (this != SYSTEM_AUTO) return this
+        return when (systemLangCode.lowercase(Locale.US)) {
+            "bn" -> BENGALI
+            "hi" -> HINDI
+            "ar" -> ARABIC
+            "es" -> SPANISH
+            "in", "id" -> INDONESIAN
+            "pt" -> PORTUGUESE
+            else -> ENGLISH
+        }
+    }
+
+    fun isRtl(systemLangCode: String = Locale.getDefault().language): Boolean =
+        resolve(systemLangCode) == ARABIC
 
     companion object {
         fun fromKey(key: String?): AppLanguage =
-            entries.firstOrNull { it.storageKey == key } ?: BENGALI
+            entries.firstOrNull { it.storageKey == key } ?: SYSTEM_AUTO
     }
 }
 
@@ -101,24 +147,55 @@ enum class LockSource {
     FLOATING_BUBBLE,
     NOTIFICATION,
     QUICK_TILE,
-    POCKET_SENSOR
+    POCKET_SENSOR,
+    FLIP_GESTURE,
+    WIDGET
 }
+
+data class CustomProfile(
+    val id: String,
+    val name: String,
+    val unlockMethod: UnlockMethod,
+    val holdDurationMs: Long,
+    val customDimPercent: Int,
+    val lockBrightnessPercent: Int,
+    val borderEnabled: Boolean,
+    val borderColor: BorderColorOption,
+    val borderStyle: BorderStyle,
+    val badgeVisibilityMode: BadgeVisibilityMode,
+    val floatingBubbleEnabled: Boolean,
+    val pocketAutoLockEnabled: Boolean,
+    val keepScreenOnEnabled: Boolean,
+    val oledClockEnabled: Boolean
+)
+
+data class DailyStatEntry(
+    val dateKey: String,
+    val label: String,
+    val blockedTouches: Long
+)
 
 data class ShieldSettings(
     val isArmed: Boolean = false,
-    // Unlock & Security
+    // Security & Unlock
     val unlockMethod: UnlockMethod = UnlockMethod.LONG_PRESS,
     val holdDurationMs: Long = 1800L,
     val unlockPin: String = "1234",
+    val biometricUnlockEnabled: Boolean = true,
+    val emergencyHoldBypassEnabled: Boolean = true,
     val lockCountdownSeconds: Int = 0,
     val hudTimeoutMs: Long = 3000L,
-    // Overlay Visuals
+    // Overlay Visuals & Display
     val overlayStyle: OverlayStyle = OverlayStyle.CLEAR_GLASS,
     val customDimPercent: Int = 0,
+    val lockBrightnessPercent: Int = -1,
     val borderEnabled: Boolean = true,
     val borderColor: BorderColorOption = BorderColorOption.EMERALD,
     val borderThickness: BorderThickness = BorderThickness.MEDIUM,
+    val borderStyle: BorderStyle = BorderStyle.FULL_GLOW,
+    val borderPulseEnabled: Boolean = true,
     val badgeVisibilityMode: BadgeVisibilityMode = BadgeVisibilityMode.ALWAYS,
+    val oledClockEnabled: Boolean = false,
     // Floating Bubble
     val floatingBubbleEnabled: Boolean = true,
     val floatingBubbleOpacity: Float = 0.85f,
@@ -126,22 +203,35 @@ data class ShieldSettings(
     val bubbleStyle: BubbleStyle = BubbleStyle.SHIELD_CIRCLE,
     val bubbleAutoTuckEnabled: Boolean = true,
     val bubbleDoubleTapHideEnabled: Boolean = true,
-    // Pocket Sensor & Automation
+    // Pocket Sensor & Context Automation
     val pocketAutoLockEnabled: Boolean = true,
     val pocketAutoUnlockEnabled: Boolean = false,
     val pocketDebounceMs: Long = 700L,
     val pocketOrientationFilterEnabled: Boolean = true,
+    val pausePocketInLandscape: Boolean = true,
+    val pausePocketWhileCharging: Boolean = false,
+    val flipFaceDownLockEnabled: Boolean = false,
     val autoUnlockOnCallEnabled: Boolean = false,
+    val reLockAfterCallEnabled: Boolean = false,
     val sessionTimerMinutes: Int = 0,
-    // System & App
+    // System, Appearance & Profiles
     val keepScreenOnEnabled: Boolean = true,
     val hapticFeedbackEnabled: Boolean = true,
     val autoStartOnBootEnabled: Boolean = false,
-    val darkThemeEnabled: Boolean = false,
-    val appLanguage: AppLanguage = AppLanguage.BENGALI,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val dynamicColorEnabled: Boolean = true,
+    val appLanguage: AppLanguage = AppLanguage.SYSTEM_AUTO,
+    val hasCompletedOnboarding: Boolean = false,
+    val customProfiles: List<CustomProfile> = emptyList(),
+    // Stats & Analytics
     val totalBlockedTouches: Long = 0L,
-    val totalLockSessions: Long = 0L
-)
+    val totalLockSessions: Long = 0L,
+    val dailyBlockedHistory: Map<String, Long> = emptyMap(),
+    val lockSourceCounts: Map<String, Long> = emptyMap()
+) {
+    val darkThemeEnabled: Boolean
+        get() = themeMode == ThemeMode.DARK
+}
 
 data class ShieldRuntimeState(
     val isServiceRunning: Boolean = false,
@@ -159,5 +249,9 @@ data class ShieldRuntimeState(
     val hasAccelerometer: Boolean = false,
     val accelerometerName: String = "",
     val isPocketOrientationValid: Boolean = true,
-    val isFlatFaceUp: Boolean = false
+    val isFlatFaceUp: Boolean = false,
+    val isFaceDown: Boolean = false,
+    val isLandscape: Boolean = false,
+    val isCharging: Boolean = false,
+    val batteryPercent: Int = 100
 )

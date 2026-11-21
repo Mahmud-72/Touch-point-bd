@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">TouchShield</string>
+    <string name="tile_label">Kunci Sentuh</string>
+    <string name="notification_channel_name">Perlindungan TouchShield</string>
+    <string name="notification_channel_desc">Mengontrol overlay kunci sentuh dan sensor saku</string>
+    <string name="widget_label">Kunci Sentuh Cepat</string>
+    <string name="widget_tap_lock">Kunci Sentuh</string>
+    <string name="widget_locked">Terkunci</string>
+    <string name="widget_armed">Siaga</string>
+    <string name="shortcut_lock_short">Kunci Layar</string>
+    <string name="shortcut_lock_long">Kunci Sentuhan Layar Sekarang</string>
+    <string name="shortcut_pocket_short">Penjaga Saku</string>
+    <string name="shortcut_pocket_long">Ubah Kunci Saku Otomatis</string>
+</resources>

@@ -22,15 +22,23 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.data.CustomProfile
 import com.example.data.SmartPreset
 import com.example.ui.AppStrings
 import com.example.ui.MainUiState
+import com.example.ui.components.AnalyticsCard
 import com.example.ui.components.LivePocketSensorCard
 import com.example.ui.components.PermissionChecklistCard
+import com.example.ui.components.SaveProfileDialog
 import com.example.ui.components.SettingToggleRow
 import com.example.ui.components.ShieldHeroCard
 import com.example.ui.components.SmartPresetsRow
@@ -43,6 +51,10 @@ fun DashboardScreen(
     onLockNow: () -> Unit,
     onOpenSandbox: () -> Unit,
     onSelectPreset: (SmartPreset) -> Unit,
+    onSaveCustomProfile: (String) -> Unit,
+    onApplyCustomProfile: (CustomProfile) -> Unit,
+    onRenameCustomProfile: (CustomProfile, String) -> Unit,
+    onDeleteCustomProfile: (CustomProfile) -> Unit,
     onRequestOverlayPermission: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
     onTogglePocketAutoLock: (Boolean) -> Unit,
@@ -51,6 +63,9 @@ fun DashboardScreen(
     onToggleKeepScreenOn: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showCreateProfileDialog by rememberSaveable { mutableStateOf(false) }
+    var renameTargetProfile by remember { mutableStateOf<CustomProfile?>(null) }
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
@@ -81,7 +96,11 @@ fun DashboardScreen(
             SmartPresetsRow(
                 settings = uiState.settings,
                 strings = strings,
-                onSelectPreset = onSelectPreset
+                onSelectPreset = onSelectPreset,
+                onSaveCurrentProfile = { showCreateProfileDialog = true },
+                onApplyCustomProfile = onApplyCustomProfile,
+                onRenameCustomProfile = { renameTargetProfile = it },
+                onDeleteCustomProfile = onDeleteCustomProfile
             )
         }
 
@@ -109,8 +128,16 @@ fun DashboardScreen(
         }
 
         item {
+            AnalyticsCard(
+                settings = uiState.settings,
+                strings = strings
+            )
+        }
+
+        item {
             LivePocketSensorCard(
                 runtime = uiState.runtime,
+                settings = uiState.settings,
                 strings = strings
             )
         }
@@ -175,6 +202,27 @@ fun DashboardScreen(
         item {
             Spacer(modifier = Modifier.height(12.dp))
         }
+    }
+
+    if (showCreateProfileDialog) {
+        SaveProfileDialog(
+            title = strings.saveProfileDialogTitle,
+            hint = strings.saveProfileHint,
+            strings = strings,
+            onSave = onSaveCustomProfile,
+            onDismiss = { showCreateProfileDialog = false }
+        )
+    }
+
+    renameTargetProfile?.let { target ->
+        SaveProfileDialog(
+            title = strings.renameProfileDialogTitle,
+            hint = strings.saveProfileHint,
+            initialName = target.name,
+            strings = strings,
+            onSave = { newName -> onRenameCustomProfile(target, newName) },
+            onDismiss = { renameTargetProfile = null }
+        )
     }
 }
 

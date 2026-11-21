@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">TouchShield</string>
+    <string name="tile_label">টাচ লক</string>
+    <string name="notification_channel_name">TouchShield সুরক্ষা</string>
+    <string name="notification_channel_desc">সক্রিয় টাচ লক ওভারলে এবং পকেট ডিটেকশন সার্ভিস নিয়ন্ত্রণ করে</string>
+    <string name="widget_label">দ্রুত টাচ লক</string>
+    <string name="widget_tap_lock">টাচ লক</string>
+    <string name="widget_locked">লক চালু</string>
+    <string name="widget_armed">প্রস্তুত</string>
+    <string name="shortcut_lock_short">স্ক্রিন লক</string>
+    <string name="shortcut_lock_long">এখনই স্ক্রিন টাচ লক করুন</string>
+    <string name="shortcut_pocket_short">পকেট গার্ড</string>
+    <string name="shortcut_pocket_long">অটো পকেট লক চালু/বন্ধ করুন</string>
+</resources>
