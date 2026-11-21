@@ -37,8 +37,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
@@ -46,8 +50,11 @@ import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Sensors
 import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.TouchApp
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VerifiedUser
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -56,6 +63,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -94,6 +102,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.BadgeVisibilityMode
 import com.example.data.BorderStyle
+import com.example.data.SettingsSection
 import com.example.data.ShieldRuntimeState
 import com.example.data.ShieldSettings
 import com.example.data.UnlockMethod
@@ -105,15 +114,18 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ShieldHeroCard(
     isServiceRunning: Boolean,
     isScreenLocked: Boolean,
     hasOverlayPermission: Boolean,
+    settings: ShieldSettings,
     strings: AppStrings,
     onToggleArmed: () -> Unit,
     onLockNow: () -> Unit,
     onTestSandbox: () -> Unit,
+    onOpenSettings: (SettingsSection?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val accentColor by animateColorAsState(
@@ -171,41 +183,75 @@ fun ShieldHeroCard(
                         radius = 650f
                     )
                 )
-                .padding(20.dp)
+                .padding(18.dp)
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = accentColor.copy(alpha = 0.14f),
-                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.4f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = accentColor.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.4f))
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(accentColor)
-                        )
-                        Text(
-                            text = statusTitle,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = accentColor
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(accentColor)
+                            )
+                            Text(
+                                text = statusTitle,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = accentColor
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable { onOpenSettings(null) }
+                            .testTag("hero_configure_button"),
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Tune,
+                                contentDescription = strings.btnCustomize,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = strings.btnCustomize,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Box(
                     modifier = Modifier
-                        .size(136.dp)
+                        .size(130.dp)
                         .clip(CircleShape)
                         .clickable { onToggleArmed() }
                         .testTag("shield_orb_button"),
@@ -235,7 +281,7 @@ fun ShieldHeroCard(
                     }
 
                     Surface(
-                        modifier = Modifier.size(72.dp),
+                        modifier = Modifier.size(70.dp),
                         shape = CircleShape,
                         color = accentColor.copy(alpha = 0.18f),
                         border = BorderStroke(1.5.dp, accentColor)
@@ -250,13 +296,13 @@ fun ShieldHeroCard(
                                 },
                                 contentDescription = statusTitle,
                                 tint = accentColor,
-                                modifier = Modifier.size(34.dp)
+                                modifier = Modifier.size(32.dp)
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
                     text = statusDesc,
@@ -265,7 +311,61 @@ fun ShieldHeroCard(
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Active Configuration Strip (Quick Deep-Jumps into Settings)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val unlockChipText = when (settings.unlockMethod) {
+                        UnlockMethod.LONG_PRESS ->
+                            "${strings.unlockMethodTitle(settings.unlockMethod)} (${String.format("%.1f", settings.holdDurationMs / 1000f)}s)"
+                        UnlockMethod.PIN -> if (settings.biometricUnlockEnabled) {
+                            "${strings.unlockMethodTitle(settings.unlockMethod)} + ${strings.overlayBtnBiometric}"
+                        } else {
+                            strings.unlockMethodTitle(settings.unlockMethod)
+                        }
+                        else -> strings.unlockMethodTitle(settings.unlockMethod)
+                    }
+                    HeroRulePill(
+                        icon = if (settings.unlockMethod == UnlockMethod.PIN && settings.biometricUnlockEnabled) {
+                            Icons.Rounded.Fingerprint
+                        } else {
+                            Icons.Rounded.Lock
+                        },
+                        text = unlockChipText,
+                        onClick = { onOpenSettings(SettingsSection.UNLOCK) },
+                        testTag = "hero_rule_unlock"
+                    )
+
+                    val clarityPct = (100 - settings.customDimPercent).coerceIn(5, 100)
+                    HeroRulePill(
+                        icon = Icons.Rounded.Visibility,
+                        text = "$clarityPct% ${strings.clearPercentLabel}",
+                        onClick = { onOpenSettings(SettingsSection.OVERLAY) },
+                        testTag = "hero_rule_display"
+                    )
+
+                    if (settings.sessionTimerMinutes > 0) {
+                        HeroRulePill(
+                            icon = Icons.Rounded.Timer,
+                            text = "${settings.sessionTimerMinutes}m",
+                            onClick = { onOpenSettings(SettingsSection.POCKET) },
+                            testTag = "hero_rule_timer"
+                        )
+                    } else if (settings.lockCountdownSeconds > 0) {
+                        HeroRulePill(
+                            icon = Icons.Rounded.Timer,
+                            text = "${settings.lockCountdownSeconds}s",
+                            onClick = { onOpenSettings(SettingsSection.UNLOCK) },
+                            testTag = "hero_rule_countdown"
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Button(
                     onClick = onToggleArmed,
@@ -357,6 +457,120 @@ fun ShieldHeroCard(
             }
         }
     }
+}
+
+@Composable
+private fun HeroRulePill(
+    icon: ImageVector,
+    text: String,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    Surface(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .clickable { onClick() }
+            .testTag(testTag),
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(13.dp)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+fun SystemReadinessBar(
+    permissions: PermissionStatus,
+    strings: AppStrings,
+    onRequestOverlay: () -> Unit,
+    onRequestNotifications: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (permissions.hasOverlayPermission && permissions.hasNotificationPermission) {
+        Surface(
+            modifier = modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium)
+                .clickable { onOpenDiagnostics() }
+                .testTag("system_readiness_bar"),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.VerifiedUser,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = strings.systemReadyBadge,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = strings.systemReadinessTapHint,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Icon(
+                        imageVector = Icons.Rounded.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+        return
+    }
+
+    PermissionChecklistCard(
+        permissions = permissions,
+        strings = strings,
+        onRequestOverlay = onRequestOverlay,
+        onRequestNotifications = onRequestNotifications,
+        modifier = modifier
+    )
 }
 
 @Composable
@@ -512,6 +726,7 @@ fun LivePocketSensorCard(
     runtime: ShieldRuntimeState,
     settings: ShieldSettings,
     strings: AppStrings,
+    onOpenPocketSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val sensorColor by animateColorAsState(
@@ -552,17 +767,35 @@ fun LivePocketSensorCard(
                     )
                 }
 
-                if (runtime.hasProximitySensor) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = sensorColor.copy(alpha = 0.14f)
-                    ) {
-                        Text(
-                            text = "${String.format("%.1f", runtime.proximityDistanceCm)} cm",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = sensorColor,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (runtime.hasProximitySensor) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = sensorColor.copy(alpha = 0.14f)
+                        ) {
+                            Text(
+                                text = "${String.format("%.1f", runtime.proximityDistanceCm)} cm",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = sensorColor,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                    if (onOpenPocketSettings != null) {
+                        IconButton(
+                            onClick = onOpenPocketSettings,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Tune,
+                                contentDescription = strings.btnCustomize,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -570,28 +803,46 @@ fun LivePocketSensorCard(
             Spacer(modifier = Modifier.height(10.dp))
 
             if (runtime.hasProximitySensor) {
+                val maxRange = runtime.proximityMaxRangeCm.coerceAtLeast(1f)
+                val closeness = (1f - (runtime.proximityDistanceCm / maxRange)).coerceIn(0.08f, 1f)
+                val animatedCloseness by animateFloatAsState(targetValue = closeness, label = "proxBar")
+
                 Surface(
                     shape = MaterialTheme.shapes.small,
                     color = sensorColor.copy(alpha = 0.08f),
                     border = BorderStroke(1.dp, sensorColor.copy(alpha = 0.25f))
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
                     ) {
-                        Text(
-                            text = if (runtime.proximityIsNear) strings.sensorNear else strings.sensorFar,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = sensorColor
-                        )
-                        Box(
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = if (runtime.proximityIsNear) strings.sensorNear else strings.sensorFar,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = sensorColor
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .clip(CircleShape)
+                                    .background(sensorColor)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { animatedCloseness },
                             modifier = Modifier
-                                .size(12.dp)
-                                .clip(CircleShape)
-                                .background(sensorColor)
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(50)),
+                            color = sensorColor,
+                            trackColor = sensorColor.copy(alpha = 0.16f)
                         )
                     }
                 }
@@ -604,7 +855,7 @@ fun LivePocketSensorCard(
             }
 
             // Orientation & Context Badges
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -628,6 +879,20 @@ fun LivePocketSensorCard(
                             text = orientationText,
                             style = MaterialTheme.typography.labelSmall,
                             color = orientationColor,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+
+                if (settings.flipFaceDownLockEnabled) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                    ) {
+                        Text(
+                            text = strings.dashFlipRuleActiveBadge,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                         )
                     }

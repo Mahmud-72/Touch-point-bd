@@ -105,7 +105,17 @@ data class UiGeneralStrings(
     val subheaderCallTimer: String,
     val subheaderAppearance: String,
     val subheaderBackupReset: String,
-    val subheaderDiagnostics: String
+    val subheaderDiagnostics: String,
+    val btnCustomize: String,
+    val statScreenClarity: String,
+    val dashSectionOverview: String,
+    val dashSectionQuickControls: String,
+    val dashSectionProfiles: String,
+    val dashSectionInsights: String,
+    val systemReadyBadge: String,
+    val systemReadinessTapHint: String,
+    val dashQuickStyleLabel: String,
+    val dashFlipRuleActiveBadge: String
 )
 
 data class UiSettingsStrings(
@@ -395,6 +405,16 @@ class AppStrings(
     val subheaderAppearance: String get() = general.subheaderAppearance
     val subheaderBackupReset: String get() = general.subheaderBackupReset
     val subheaderDiagnostics: String get() = general.subheaderDiagnostics
+    val btnCustomize: String get() = general.btnCustomize
+    val statScreenClarity: String get() = general.statScreenClarity
+    val dashSectionOverview: String get() = general.dashSectionOverview
+    val dashSectionQuickControls: String get() = general.dashSectionQuickControls
+    val dashSectionProfiles: String get() = general.dashSectionProfiles
+    val dashSectionInsights: String get() = general.dashSectionInsights
+    val systemReadyBadge: String get() = general.systemReadyBadge
+    val systemReadinessTapHint: String get() = general.systemReadinessTapHint
+    val dashQuickStyleLabel: String get() = general.dashQuickStyleLabel
+    val dashFlipRuleActiveBadge: String get() = general.dashFlipRuleActiveBadge
 
     val holdDurationLabel: String get() = cfg.holdDurationLabel
     val hudTimeoutLabel: String get() = cfg.hudTimeoutLabel
@@ -791,7 +811,17 @@ val EnglishStrings = AppStrings(
         subheaderCallTimer = "CALL & SESSION AUTOMATION",
         subheaderAppearance = "APPEARANCE & LANGUAGE",
         subheaderBackupReset = "BACKUP, PRIVACY & RESET",
-        subheaderDiagnostics = "DEVICE HEALTH & DIAGNOSTICS"
+        subheaderDiagnostics = "DEVICE HEALTH & DIAGNOSTICS",
+        btnCustomize = "Configure",
+        statScreenClarity = "Screen Clarity",
+        dashSectionOverview = "PROTECTION STATUS",
+        dashSectionQuickControls = "QUICK CONTROLS & DISPLAY",
+        dashSectionProfiles = "PROFILES & MODES",
+        dashSectionInsights = "TELEMETRY & 7-DAY INSIGHTS",
+        systemReadyBadge = "System Ready • All Core Permissions Active",
+        systemReadinessTapHint = "Details",
+        dashQuickStyleLabel = "Screen Mode",
+        dashFlipRuleActiveBadge = "Flip-to-Lock ON"
     ),
     cfg = UiSettingsStrings(
         holdDurationLabel = "Hold-to-Unlock Duration",
@@ -1076,7 +1106,17 @@ val BengaliStrings = AppStrings(
         subheaderCallTimer = "কল ও সেশন অটোমেশন",
         subheaderAppearance = "থিম ও ভাষা",
         subheaderBackupReset = "ব্যাকআপ, প্রাইভেসি ও রিসেট",
-        subheaderDiagnostics = "ডিভাইস হেলথ ও ডায়াগনস্টিকস"
+        subheaderDiagnostics = "ডিভাইস হেলথ ও ডায়াগনস্টিকস",
+        btnCustomize = "সেটিংস",
+        statScreenClarity = "স্ক্রিন স্বচ্ছতা",
+        dashSectionOverview = "সুরক্ষা অবস্থা",
+        dashSectionQuickControls = "দ্রুত কন্ট্রোল ও ডিসপ্লে",
+        dashSectionProfiles = "প্রোফাইল ও মোড",
+        dashSectionInsights = "টেলিমেট্রি ও ৭ দিনের বিশ্লেষণ",
+        systemReadyBadge = "সিস্টেম প্রস্তুত • সব মূল অনুমতি সক্রিয়",
+        systemReadinessTapHint = "বিস্তারিত",
+        dashQuickStyleLabel = "স্ক্রিন মোড",
+        dashFlipRuleActiveBadge = "উল্টালে লক চালু"
     ),
     cfg = UiSettingsStrings(
         holdDurationLabel = "হোল্ড আনলক সময়",

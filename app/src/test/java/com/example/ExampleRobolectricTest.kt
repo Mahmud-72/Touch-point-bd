@@ -15,6 +15,7 @@ import com.example.data.BubbleSize
 import com.example.data.BubbleStyle
 import com.example.data.LockSource
 import com.example.data.OverlayStyle
+import com.example.data.SettingsSection
 import com.example.data.ShieldPreferences
 import com.example.data.ShieldStateHolder
 import com.example.data.SmartPreset
@@ -316,6 +317,16 @@ class ExampleRobolectricTest {
             assertTrue(strings.privacyCardTitle.isNotBlank())
             assertTrue(strings.btnExportBackup.isNotBlank())
             assertTrue(strings.btnImportBackup.isNotBlank())
+            assertTrue(strings.btnCustomize.isNotBlank())
+            assertTrue(strings.statScreenClarity.isNotBlank())
+            assertTrue(strings.dashSectionOverview.isNotBlank())
+            assertTrue(strings.dashSectionQuickControls.isNotBlank())
+            assertTrue(strings.dashSectionProfiles.isNotBlank())
+            assertTrue(strings.dashSectionInsights.isNotBlank())
+            assertTrue(strings.systemReadyBadge.isNotBlank())
+            assertTrue(strings.dashQuickStyleLabel.isNotBlank())
+            assertTrue(strings.dashFlipRuleActiveBadge.isNotBlank())
+            assertEquals(5, SettingsSection.entries.size)
 
             UnlockMethod.entries.forEach { method ->
                 assertTrue(strings.unlockMethodTitle(method).isNotBlank())

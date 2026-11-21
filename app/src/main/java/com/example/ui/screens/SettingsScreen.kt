@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccessTime
@@ -67,6 +68,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -87,6 +89,7 @@ import com.example.data.BubbleSize
 import com.example.data.BubbleStyle
 import com.example.data.CustomProfile
 import com.example.data.OverlayStyle
+import com.example.data.SettingsSection
 import com.example.data.ShieldRuntimeState
 import com.example.data.ShieldSettings
 import com.example.data.SmartPreset
@@ -165,6 +168,8 @@ fun SettingsScreen(
     onOpenBatterySettings: () -> Unit,
     onResetStats: () -> Unit,
     onRestoreDefaults: () -> Unit,
+    focusSection: SettingsSection? = null,
+    focusTicket: Int = 0,
     modifier: Modifier = Modifier
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -175,6 +180,29 @@ fun SettingsScreen(
     var expandBubble by rememberSaveable { mutableStateOf(false) }
     var expandPocket by rememberSaveable { mutableStateOf(false) }
     var expandSystem by rememberSaveable { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(focusTicket, focusSection) {
+        if (focusTicket > 0 && focusSection != null) {
+            searchQuery = ""
+            when (focusSection) {
+                SettingsSection.UNLOCK -> expandUnlock = true
+                SettingsSection.OVERLAY -> expandOverlay = true
+                SettingsSection.BUBBLE -> expandBubble = true
+                SettingsSection.POCKET -> expandPocket = true
+                SettingsSection.SYSTEM -> expandSystem = true
+            }
+            val baseOffset = if (showGestureTester) 4 else 3
+            val targetIdx = baseOffset + when (focusSection) {
+                SettingsSection.UNLOCK -> 0
+                SettingsSection.OVERLAY -> 1
+                SettingsSection.BUBBLE -> 2
+                SettingsSection.POCKET -> 3
+                SettingsSection.SYSTEM -> 4
+            }
+            listState.animateScrollToItem(targetIdx)
+        }
+    }
 
     var showPinDialog by rememberSaveable { mutableStateOf(false) }
     var showCreateProfileDialog by rememberSaveable { mutableStateOf(false) }
@@ -226,6 +254,7 @@ fun SettingsScreen(
     )
 
     LazyColumn(
+        state = listState,
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)

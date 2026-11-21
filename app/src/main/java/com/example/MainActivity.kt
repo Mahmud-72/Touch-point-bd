@@ -51,6 +51,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -68,6 +69,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.data.SettingsSection
 import com.example.ui.MainUiState
 import com.example.ui.MainViewModel
 import com.example.ui.components.InAppLockSandboxDialog
@@ -185,6 +187,8 @@ private fun TouchShieldRoot(
 ) {
     val strings = getAppStrings(uiState.settings.appLanguage)
     var currentTab by rememberSaveable { mutableStateOf(AppTab.DASHBOARD) }
+    var settingsFocusSection by rememberSaveable { mutableStateOf<SettingsSection?>(null) }
+    var settingsFocusTicket by rememberSaveable { mutableIntStateOf(0) }
     var showLanguagePicker by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -324,7 +328,7 @@ private fun TouchShieldRoot(
                     Column(
                         modifier = Modifier
                             .fillMaxHeight()
-                            .widthIn(max = 680.dp)
+                            .widthIn(max = if (currentTab == AppTab.DASHBOARD && isWideScreen) 960.dp else 680.dp)
                             .fillMaxWidth()
                     ) {
                         when (currentTab) {
@@ -335,6 +339,7 @@ private fun TouchShieldRoot(
                                 onLockNow = { viewModel.lockScreenNow() },
                                 onOpenSandbox = { viewModel.openSandbox() },
                                 onSelectPreset = { viewModel.applySmartPreset(it) },
+                                onSelectOverlayStyle = { viewModel.setOverlayStyle(it) },
                                 onSaveCustomProfile = { viewModel.saveCurrentAsProfile(it) },
                                 onApplyCustomProfile = { viewModel.applyCustomProfile(it.id) },
                                 onRenameCustomProfile = { profile, newName ->
@@ -346,7 +351,14 @@ private fun TouchShieldRoot(
                                 onTogglePocketAutoLock = { viewModel.setPocketAutoLock(it) },
                                 onTogglePocketAutoUnlock = { viewModel.setPocketAutoUnlock(it) },
                                 onToggleFloatingBubble = { viewModel.setFloatingBubbleEnabled(it) },
-                                onToggleKeepScreenOn = { viewModel.setKeepScreenOn(it) }
+                                onToggleKeepScreenOn = { viewModel.setKeepScreenOn(it) },
+                                onOpenSettings = { section ->
+                                    if (section != null) {
+                                        settingsFocusSection = section
+                                        settingsFocusTicket++
+                                    }
+                                    currentTab = AppTab.SETTINGS
+                                }
                             )
 
                             AppTab.SETTINGS -> SettingsScreen(
@@ -406,7 +418,9 @@ private fun TouchShieldRoot(
                                 onRequestPhoneStatePermission = onRequestPhoneStatePermission,
                                 onOpenBatterySettings = { viewModel.openBatterySettings() },
                                 onResetStats = { viewModel.resetStats() },
-                                onRestoreDefaults = { viewModel.restoreDefaults() }
+                                onRestoreDefaults = { viewModel.restoreDefaults() },
+                                focusSection = settingsFocusSection,
+                                focusTicket = settingsFocusTicket
                             )
 
                             AppTab.GUIDE -> GuideScreen(

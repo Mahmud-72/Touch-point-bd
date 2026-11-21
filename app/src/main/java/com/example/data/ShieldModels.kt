@@ -152,6 +152,14 @@ enum class LockSource {
     WIDGET
 }
 
+enum class SettingsSection {
+    UNLOCK,
+    OVERLAY,
+    BUBBLE,
+    POCKET,
+    SYSTEM
+}
+
 data class CustomProfile(
     val id: String,
     val name: String,
