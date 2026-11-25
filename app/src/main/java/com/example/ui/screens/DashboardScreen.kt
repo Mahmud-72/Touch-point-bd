@@ -22,9 +22,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BubbleChart
+import androidx.compose.material.icons.rounded.ChildCare
+import androidx.compose.material.icons.rounded.CropFree
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.NightsStay
 import androidx.compose.material.icons.rounded.PhonelinkLock
 import androidx.compose.material.icons.rounded.SensorOccupied
 import androidx.compose.material.icons.rounded.TouchApp
@@ -32,7 +37,6 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,17 +61,23 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.CustomProfile
 import com.example.data.OverlayStyle
+import com.example.data.SettingHelpTopic
 import com.example.data.SettingsSection
 import com.example.data.SmartPreset
 import com.example.ui.AppStrings
 import com.example.ui.MainUiState
 import com.example.ui.components.AnalyticsCard
+import com.example.ui.components.EasyProModeBanner
+import com.example.ui.components.FeatureHelpDialog
+import com.example.ui.components.HelpInfoIconButton
 import com.example.ui.components.LivePocketSensorCard
+import com.example.ui.components.ProFeatureBadge
 import com.example.ui.components.SaveProfileDialog
 import com.example.ui.components.SettingsSubHeader
 import com.example.ui.components.ShieldHeroCard
 import com.example.ui.components.SmartPresetsRow
 import com.example.ui.components.SystemReadinessBar
+import com.example.ui.components.TightFilterChip
 
 @Composable
 fun DashboardScreen(
@@ -84,15 +94,21 @@ fun DashboardScreen(
     onDeleteCustomProfile: (CustomProfile) -> Unit,
     onRequestOverlayPermission: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
+    onToggleAdvancedMode: (Boolean) -> Unit,
     onTogglePocketAutoLock: (Boolean) -> Unit,
     onTogglePocketAutoUnlock: (Boolean) -> Unit,
     onToggleFloatingBubble: (Boolean) -> Unit,
     onToggleKeepScreenOn: (Boolean) -> Unit,
+    onTogglePartialZone: (Boolean) -> Unit,
+    onTogglePrivacyVeil: (Boolean) -> Unit,
+    onToggleKidsSafety: (Boolean) -> Unit,
+    onToggleAppWatch: (Boolean) -> Unit,
     onOpenSettings: (SettingsSection?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showCreateProfileDialog by rememberSaveable { mutableStateOf(false) }
     var renameTargetProfile by remember { mutableStateOf<CustomProfile?>(null) }
+    var activeHelpTopic by remember { mutableStateOf<SettingHelpTopic?>(null) }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val isTwoColumn = maxWidth >= 600.dp
@@ -101,14 +117,14 @@ fun DashboardScreen(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     SettingsSubHeader(strings.dashSectionOverview)
                     ShieldHeroCard(
@@ -130,24 +146,36 @@ fun DashboardScreen(
                         onOpenDiagnostics = { onOpenSettings(SettingsSection.SYSTEM) }
                     )
                     SettingsSubHeader(strings.dashSectionQuickControls)
+                    EasyProModeBanner(
+                        isAdvancedMode = uiState.settings.isAdvancedMode,
+                        strings = strings,
+                        onModeSelected = onToggleAdvancedMode,
+                        onHelpClick = { activeHelpTopic = SettingHelpTopic.MODE_EASY_PRO }
+                    )
                     QuickControlsGridCard(
                         uiState = uiState,
                         strings = strings,
+                        onToggleAdvancedMode = onToggleAdvancedMode,
+                        onHelpClick = { activeHelpTopic = it },
                         onTogglePocketAutoLock = onTogglePocketAutoLock,
                         onTogglePocketAutoUnlock = onTogglePocketAutoUnlock,
                         onToggleFloatingBubble = onToggleFloatingBubble,
                         onToggleKeepScreenOn = onToggleKeepScreenOn,
+                        onTogglePartialZone = onTogglePartialZone,
+                        onTogglePrivacyVeil = onTogglePrivacyVeil,
+                        onToggleKidsSafety = onToggleKidsSafety,
+                        onToggleAppWatch = onToggleAppWatch,
                         onSelectOverlayStyle = onSelectOverlayStyle,
                         onOpenDisplaySettings = { onOpenSettings(SettingsSection.OVERLAY) }
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                 }
 
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     SettingsSubHeader(strings.dashSectionProfiles)
                     SmartPresetsRow(
@@ -167,19 +195,21 @@ fun DashboardScreen(
                         strings = strings,
                         onOpenPocketSettings = { onOpenSettings(SettingsSection.POCKET) }
                     )
-                    AnalyticsCard(
-                        settings = uiState.settings,
-                        strings = strings,
-                        initiallyExpanded = true
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    if (uiState.settings.isAdvancedMode) {
+                        AnalyticsCard(
+                            settings = uiState.settings,
+                            strings = strings,
+                            initiallyExpanded = true
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
                 }
             }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 item {
                     SettingsSubHeader(
@@ -217,13 +247,28 @@ fun DashboardScreen(
                 }
 
                 item {
+                    EasyProModeBanner(
+                        isAdvancedMode = uiState.settings.isAdvancedMode,
+                        strings = strings,
+                        onModeSelected = onToggleAdvancedMode,
+                        onHelpClick = { activeHelpTopic = SettingHelpTopic.MODE_EASY_PRO }
+                    )
+                }
+
+                item {
                     QuickControlsGridCard(
                         uiState = uiState,
                         strings = strings,
+                        onToggleAdvancedMode = onToggleAdvancedMode,
+                        onHelpClick = { activeHelpTopic = it },
                         onTogglePocketAutoLock = onTogglePocketAutoLock,
                         onTogglePocketAutoUnlock = onTogglePocketAutoUnlock,
                         onToggleFloatingBubble = onToggleFloatingBubble,
                         onToggleKeepScreenOn = onToggleKeepScreenOn,
+                        onTogglePartialZone = onTogglePartialZone,
+                        onTogglePrivacyVeil = onTogglePrivacyVeil,
+                        onToggleKidsSafety = onToggleKidsSafety,
+                        onToggleAppWatch = onToggleAppWatch,
                         onSelectOverlayStyle = onSelectOverlayStyle,
                         onOpenDisplaySettings = { onOpenSettings(SettingsSection.OVERLAY) }
                     )
@@ -262,16 +307,18 @@ fun DashboardScreen(
                     )
                 }
 
-                item {
-                    AnalyticsCard(
-                        settings = uiState.settings,
-                        strings = strings,
-                        initiallyExpanded = false
-                    )
+                if (uiState.settings.isAdvancedMode) {
+                    item {
+                        AnalyticsCard(
+                            settings = uiState.settings,
+                            strings = strings,
+                            initiallyExpanded = false
+                        )
+                    }
                 }
 
                 item {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                 }
             }
         }
@@ -297,6 +344,14 @@ fun DashboardScreen(
             onDismiss = { renameTargetProfile = null }
         )
     }
+
+    activeHelpTopic?.let { topic ->
+        FeatureHelpDialog(
+            help = strings.helpContent(topic),
+            strings = strings,
+            onDismiss = { activeHelpTopic = null }
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -304,14 +359,21 @@ fun DashboardScreen(
 private fun QuickControlsGridCard(
     uiState: MainUiState,
     strings: AppStrings,
+    onToggleAdvancedMode: (Boolean) -> Unit,
+    onHelpClick: (SettingHelpTopic) -> Unit,
     onTogglePocketAutoLock: (Boolean) -> Unit,
     onTogglePocketAutoUnlock: (Boolean) -> Unit,
     onToggleFloatingBubble: (Boolean) -> Unit,
     onToggleKeepScreenOn: (Boolean) -> Unit,
+    onTogglePartialZone: (Boolean) -> Unit,
+    onTogglePrivacyVeil: (Boolean) -> Unit,
+    onToggleKidsSafety: (Boolean) -> Unit,
+    onToggleAppWatch: (Boolean) -> Unit,
     onSelectOverlayStyle: (OverlayStyle) -> Unit,
     onOpenDisplaySettings: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val isProMode = uiState.settings.isAdvancedMode
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -319,7 +381,7 @@ private fun QuickControlsGridCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -332,98 +394,328 @@ private fun QuickControlsGridCard(
                 )
                 IconButton(
                     onClick = onOpenDisplaySettings,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(26.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Tune,
                         contentDescription = strings.btnCustomize,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(5.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                QuickControlTile(
-                    icon = Icons.Rounded.PhonelinkLock,
-                    title = strings.togglePocketAutoLock,
-                    checked = uiState.settings.pocketAutoLockEnabled,
-                    statusLabel = if (uiState.settings.pocketAutoLockEnabled) strings.statusOnLabel else strings.statusOffLabel,
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onTogglePocketAutoLock(!uiState.settings.pocketAutoLockEnabled)
-                    },
-                    testTag = "switch_pocket_auto_lock",
-                    modifier = Modifier.weight(1f)
-                )
-                QuickControlTile(
-                    icon = Icons.Rounded.SensorOccupied,
-                    title = strings.togglePocketAutoUnlock,
-                    checked = uiState.settings.pocketAutoUnlockEnabled,
-                    statusLabel = if (uiState.settings.pocketAutoUnlockEnabled) strings.statusOnLabel else strings.statusOffLabel,
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onTogglePocketAutoUnlock(!uiState.settings.pocketAutoUnlockEnabled)
-                    },
-                    testTag = "switch_pocket_auto_unlock",
-                    modifier = Modifier.weight(1f)
-                )
+            if (!isProMode) {
+                // Easy Mode: 4 essential everyday tiles
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    QuickControlTile(
+                        icon = Icons.Rounded.PhonelinkLock,
+                        title = strings.togglePocketAutoLock,
+                        checked = uiState.settings.pocketAutoLockEnabled,
+                        statusLabel = if (uiState.settings.pocketAutoLockEnabled) strings.statusOnLabel else strings.statusOffLabel,
+                        helpTopic = SettingHelpTopic.POCKET_AUTO_LOCK,
+                        helpContentDesc = strings.helpActionDesc,
+                        onHelpClick = onHelpClick,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onTogglePocketAutoLock(!uiState.settings.pocketAutoLockEnabled)
+                        },
+                        testTag = "switch_pocket_auto_lock",
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickControlTile(
+                        icon = Icons.Rounded.BubbleChart,
+                        title = strings.toggleFloatingBubble,
+                        checked = uiState.settings.floatingBubbleEnabled,
+                        statusLabel = if (uiState.settings.floatingBubbleEnabled) {
+                            strings.bubbleSizeLabel(uiState.settings.bubbleSize)
+                        } else {
+                            strings.statusOffLabel
+                        },
+                        helpTopic = SettingHelpTopic.FLOATING_BUBBLE,
+                        helpContentDesc = strings.helpActionDesc,
+                        onHelpClick = onHelpClick,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onToggleFloatingBubble(!uiState.settings.floatingBubbleEnabled)
+                        },
+                        testTag = "switch_floating_bubble",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(5.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    QuickControlTile(
+                        icon = Icons.Rounded.ChildCare,
+                        title = strings.toggleKidsSafety,
+                        checked = uiState.settings.kidsSafetyEnabled,
+                        statusLabel = if (uiState.settings.kidsSafetyEnabled) strings.statusOnLabel else strings.statusOffLabel,
+                        helpTopic = SettingHelpTopic.KIDS_SAFETY,
+                        helpContentDesc = strings.helpActionDesc,
+                        onHelpClick = onHelpClick,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onToggleKidsSafety(!uiState.settings.kidsSafetyEnabled)
+                        },
+                        testTag = "switch_kids_safety",
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickControlTile(
+                        icon = Icons.Rounded.NightsStay,
+                        title = strings.togglePrivacyVeil,
+                        checked = uiState.settings.privacyVeilEnabled,
+                        statusLabel = if (uiState.settings.privacyVeilEnabled) strings.statusOnLabel else strings.statusOffLabel,
+                        helpTopic = SettingHelpTopic.PRIVACY_VEIL,
+                        helpContentDesc = strings.helpActionDesc,
+                        onHelpClick = onHelpClick,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onTogglePrivacyVeil(!uiState.settings.privacyVeilEnabled)
+                        },
+                        testTag = "switch_privacy_veil",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.small)
+                        .clickable { onToggleAdvancedMode(true) }
+                        .testTag("dash_unlock_pro_tiles"),
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.AutoAwesome,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = strings.dashUnlockProTilesHint,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            } else {
+                // Pro Mode: all 8 controls
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    QuickControlTile(
+                        icon = Icons.Rounded.PhonelinkLock,
+                        title = strings.togglePocketAutoLock,
+                        checked = uiState.settings.pocketAutoLockEnabled,
+                        statusLabel = if (uiState.settings.pocketAutoLockEnabled) strings.statusOnLabel else strings.statusOffLabel,
+                        helpTopic = SettingHelpTopic.POCKET_AUTO_LOCK,
+                        helpContentDesc = strings.helpActionDesc,
+                        onHelpClick = onHelpClick,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onTogglePocketAutoLock(!uiState.settings.pocketAutoLockEnabled)
+                        },
+                        testTag = "switch_pocket_auto_lock",
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickControlTile(
+                        icon = Icons.Rounded.SensorOccupied,
+                        title = strings.togglePocketAutoUnlock,
+                        checked = uiState.settings.pocketAutoUnlockEnabled,
+                        statusLabel = if (uiState.settings.pocketAutoUnlockEnabled) strings.statusOnLabel else strings.statusOffLabel,
+                        helpTopic = SettingHelpTopic.POCKET_AUTO_UNLOCK,
+                        helpContentDesc = strings.helpActionDesc,
+                        onHelpClick = onHelpClick,
+                        isPro = true,
+                        proBadgeLabel = strings.proBadgeLabel,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onTogglePocketAutoUnlock(!uiState.settings.pocketAutoUnlockEnabled)
+                        },
+                        testTag = "switch_pocket_auto_unlock",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(5.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    QuickControlTile(
+                        icon = Icons.Rounded.BubbleChart,
+                        title = strings.toggleFloatingBubble,
+                        checked = uiState.settings.floatingBubbleEnabled,
+                        statusLabel = if (uiState.settings.floatingBubbleEnabled) {
+                            strings.bubbleSizeLabel(uiState.settings.bubbleSize)
+                        } else {
+                            strings.statusOffLabel
+                        },
+                        helpTopic = SettingHelpTopic.FLOATING_BUBBLE,
+                        helpContentDesc = strings.helpActionDesc,
+                        onHelpClick = onHelpClick,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onToggleFloatingBubble(!uiState.settings.floatingBubbleEnabled)
+                        },
+                        testTag = "switch_floating_bubble",
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickControlTile(
+                        icon = Icons.Rounded.LightMode,
+                        title = strings.toggleKeepScreenOn,
+                        checked = uiState.settings.keepScreenOnEnabled,
+                        statusLabel = if (uiState.settings.keepScreenOnEnabled) strings.statusOnLabel else strings.statusOffLabel,
+                        helpTopic = SettingHelpTopic.KEEP_SCREEN_ON,
+                        helpContentDesc = strings.helpActionDesc,
+                        onHelpClick = onHelpClick,
+                        isPro = true,
+                        proBadgeLabel = strings.proBadgeLabel,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onToggleKeepScreenOn(!uiState.settings.keepScreenOnEnabled)
+                        },
+                        testTag = "switch_keep_screen_on",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(5.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    QuickControlTile(
+                        icon = Icons.Rounded.CropFree,
+                        title = strings.togglePartialZone,
+                        checked = uiState.settings.partialZoneEnabled,
+                        statusLabel = if (uiState.settings.partialZoneEnabled) {
+                            strings.partialZonePresetLabel(uiState.settings.partialZonePreset)
+                        } else {
+                            strings.statusOffLabel
+                        },
+                        helpTopic = SettingHelpTopic.PARTIAL_TOUCH_ZONE,
+                        helpContentDesc = strings.helpActionDesc,
+                        onHelpClick = onHelpClick,
+                        isPro = true,
+                        proBadgeLabel = strings.proBadgeLabel,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onTogglePartialZone(!uiState.settings.partialZoneEnabled)
+                        },
+                        testTag = "switch_partial_zone",
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickControlTile(
+                        icon = Icons.Rounded.NightsStay,
+                        title = strings.togglePrivacyVeil,
+                        checked = uiState.settings.privacyVeilEnabled,
+                        statusLabel = if (uiState.settings.privacyVeilEnabled) strings.statusOnLabel else strings.statusOffLabel,
+                        helpTopic = SettingHelpTopic.PRIVACY_VEIL,
+                        helpContentDesc = strings.helpActionDesc,
+                        onHelpClick = onHelpClick,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onTogglePrivacyVeil(!uiState.settings.privacyVeilEnabled)
+                        },
+                        testTag = "switch_privacy_veil",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(5.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    QuickControlTile(
+                        icon = Icons.Rounded.ChildCare,
+                        title = strings.toggleKidsSafety,
+                        checked = uiState.settings.kidsSafetyEnabled,
+                        statusLabel = if (uiState.settings.kidsSafetyEnabled) strings.statusOnLabel else strings.statusOffLabel,
+                        helpTopic = SettingHelpTopic.KIDS_SAFETY,
+                        helpContentDesc = strings.helpActionDesc,
+                        onHelpClick = onHelpClick,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onToggleKidsSafety(!uiState.settings.kidsSafetyEnabled)
+                        },
+                        testTag = "switch_kids_safety",
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickControlTile(
+                        icon = Icons.Rounded.Apps,
+                        title = strings.toggleAppWatch,
+                        checked = uiState.settings.appWatchEnabled,
+                        statusLabel = if (uiState.settings.appWatchEnabled) {
+                            strings.watchedAppsSummary(uiState.settings.watchedAppPackages.size)
+                        } else {
+                            strings.statusOffLabel
+                        },
+                        helpTopic = SettingHelpTopic.APP_WATCH,
+                        helpContentDesc = strings.helpActionDesc,
+                        onHelpClick = onHelpClick,
+                        isPro = true,
+                        proBadgeLabel = strings.proBadgeLabel,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onToggleAppWatch(!uiState.settings.appWatchEnabled)
+                        },
+                        testTag = "switch_app_watch",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                QuickControlTile(
-                    icon = Icons.Rounded.BubbleChart,
-                    title = strings.toggleFloatingBubble,
-                    checked = uiState.settings.floatingBubbleEnabled,
-                    statusLabel = if (uiState.settings.floatingBubbleEnabled) {
-                        strings.bubbleSizeLabel(uiState.settings.bubbleSize)
-                    } else {
-                        strings.statusOffLabel
-                    },
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onToggleFloatingBubble(!uiState.settings.floatingBubbleEnabled)
-                    },
-                    testTag = "switch_floating_bubble",
-                    modifier = Modifier.weight(1f)
-                )
-                QuickControlTile(
-                    icon = Icons.Rounded.LightMode,
-                    title = strings.toggleKeepScreenOn,
-                    checked = uiState.settings.keepScreenOnEnabled,
-                    statusLabel = if (uiState.settings.keepScreenOnEnabled) strings.statusOnLabel else strings.statusOffLabel,
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onToggleKeepScreenOn(!uiState.settings.keepScreenOnEnabled)
-                    },
-                    testTag = "switch_keep_screen_on",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = strings.dashQuickStyleLabel,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             Spacer(modifier = Modifier.height(6.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(modifier = Modifier.height(5.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Text(
+                    text = strings.dashQuickStyleLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                HelpInfoIconButton(
+                    contentDescription = strings.helpActionDesc,
+                    onClick = { onHelpClick(SettingHelpTopic.OVERLAY_STYLE) },
+                    iconSize = 13.dp,
+                    modifier = Modifier.testTag("help_dash_overlay_style")
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 OverlayStyle.entries.forEach { style ->
                     val selected = when (style) {
@@ -431,16 +723,10 @@ private fun QuickControlsGridCard(
                         OverlayStyle.SUBTLE_TINT -> uiState.settings.customDimPercent in 1..60
                         OverlayStyle.AMOLED_BLACK -> uiState.settings.customDimPercent > 60
                     }
-                    FilterChip(
+                    TightFilterChip(
                         selected = selected,
                         onClick = { onSelectOverlayStyle(style) },
-                        label = {
-                            Text(
-                                text = strings.overlayStyleTitle(style),
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1
-                            )
-                        },
+                        label = strings.overlayStyleTitle(style),
                         modifier = Modifier.testTag("dash_style_${style.storageKey}")
                     )
                 }
@@ -455,8 +741,13 @@ private fun QuickControlTile(
     title: String,
     checked: Boolean,
     statusLabel: String,
+    helpTopic: SettingHelpTopic,
+    helpContentDesc: String,
+    onHelpClick: (SettingHelpTopic) -> Unit,
     onClick: () -> Unit,
     testTag: String,
+    isPro: Boolean = false,
+    proBadgeLabel: String = "PRO",
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -482,60 +773,79 @@ private fun QuickControlTile(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp)
+                .padding(horizontal = 7.dp, vertical = 6.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    modifier = Modifier.size(32.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (checked) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = if (checked) {
-                                MaterialTheme.colorScheme.onPrimary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = if (checked) {
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    }
-                ) {
-                    Text(
-                        text = statusLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
+                    Surface(
+                        modifier = Modifier.size(24.dp),
+                        shape = RoundedCornerShape(6.dp),
                         color = if (checked) {
                             MaterialTheme.colorScheme.primary
                         } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        maxLines = 1,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            MaterialTheme.colorScheme.surface
+                        }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = if (checked) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                    if (isPro) {
+                        ProFeatureBadge(label = proBadgeLabel)
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = if (checked) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        }
+                    ) {
+                        Text(
+                            text = statusLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (checked) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                    HelpInfoIconButton(
+                        contentDescription = helpContentDesc,
+                        onClick = { onHelpClick(helpTopic) },
+                        iconSize = 13.dp,
+                        modifier = Modifier.testTag("help_$testTag")
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = title,
@@ -562,7 +872,7 @@ private fun DashboardKpiRow(
     val clarityPercent = (100 - uiState.settings.customDimPercent).coerceIn(5, 100)
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         StatTileCard(
             icon = Icons.Rounded.TouchApp,
@@ -601,24 +911,24 @@ private fun StatTileCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 12.dp),
+                .padding(horizontal = 5.dp, vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(15.dp)
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = value,
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1
             )
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(1.dp))
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodySmall,

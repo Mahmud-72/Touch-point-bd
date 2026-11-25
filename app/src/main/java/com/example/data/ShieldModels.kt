@@ -141,6 +141,66 @@ enum class AppLanguage(val storageKey: String, val displayLabel: String) {
     }
 }
 
+enum class AppWatchAction(val storageKey: String) {
+    SHOW_BUBBLE("show_bubble"),
+    AUTO_LOCK("auto_lock");
+
+    companion object {
+        fun fromKey(key: String?): AppWatchAction =
+            entries.firstOrNull { it.storageKey == key } ?: SHOW_BUBBLE
+    }
+}
+
+enum class ShakeSensitivity(val storageKey: String, val gThreshold: Float) {
+    LOW("low", 21.5f),
+    MEDIUM("medium", 17.5f),
+    HIGH("high", 14.5f);
+
+    companion object {
+        fun fromKey(key: String?): ShakeSensitivity =
+            entries.firstOrNull { it.storageKey == key } ?: MEDIUM
+    }
+}
+
+enum class VolumeShortcutAction(val storageKey: String) {
+    OFF("off"),
+    TOGGLE_LOCK("toggle_lock"),
+    UNLOCK_ONLY("unlock_only");
+
+    companion object {
+        fun fromKey(key: String?): VolumeShortcutAction =
+            entries.firstOrNull { it.storageKey == key } ?: OFF
+    }
+}
+
+enum class PartialZonePreset(val storageKey: String) {
+    FULL_LOCK("full_lock"),
+    TOP_HALF("top_half"),
+    BOTTOM_HALF("bottom_half"),
+    CENTER_WINDOW("center_window"),
+    CUSTOM("custom");
+
+    companion object {
+        fun fromKey(key: String?): PartialZonePreset =
+            entries.firstOrNull { it.storageKey == key } ?: CENTER_WINDOW
+    }
+}
+
+data class NormalizedRect(
+    val left: Float = 0.08f,
+    val top: Float = 0.22f,
+    val right: Float = 0.92f,
+    val bottom: Float = 0.56f
+) {
+    fun clamped(): NormalizedRect {
+        val l = left.coerceIn(0.0f, 0.80f)
+        val t = top.coerceIn(0.05f, 0.80f)
+        val r = right.coerceIn(l + 0.18f, 1.0f)
+        val b = bottom.coerceIn(t + 0.14f, 0.95f)
+        return NormalizedRect(l, t, r, b)
+    }
+}
+
 enum class LockSource {
     NONE,
     MANUAL_APP,
@@ -149,7 +209,12 @@ enum class LockSource {
     QUICK_TILE,
     POCKET_SENSOR,
     FLIP_GESTURE,
-    WIDGET
+    WIDGET,
+    APP_WATCH,
+    SHAKE_GESTURE,
+    VOLUME_SHORTCUT,
+    CHARGER_RULE,
+    KIDS_TIMEOUT
 }
 
 enum class SettingsSection {
@@ -158,6 +223,45 @@ enum class SettingsSection {
     BUBBLE,
     POCKET,
     SYSTEM
+}
+
+enum class SettingHelpTopic {
+    MODE_EASY_PRO,
+    UNLOCK_METHOD,
+    BIOMETRIC_UNLOCK,
+    EMERGENCY_HOLD_BYPASS,
+    LOCK_COUNTDOWN,
+    HUD_TIMEOUT,
+    KIDS_SAFETY,
+    WRONG_ATTEMPT_COOLDOWN,
+    KIDS_TIMER_EXPIRY,
+    OVERLAY_STYLE,
+    LOCK_BRIGHTNESS,
+    EDGE_BORDER,
+    OLED_CLOCK,
+    PARTIAL_TOUCH_ZONE,
+    PRIVACY_VEIL,
+    STEALTH_BLACKOUT,
+    FLOATING_BUBBLE,
+    BUBBLE_AUTO_TUCK,
+    BUBBLE_DOUBLE_TAP_HIDE,
+    POCKET_AUTO_LOCK,
+    POCKET_AUTO_UNLOCK,
+    POCKET_SENSITIVITY,
+    ORIENTATION_FILTER,
+    PAUSE_LANDSCAPE,
+    PAUSE_CHARGING,
+    FLIP_FACE_DOWN,
+    CALL_AUTO_UNLOCK,
+    SESSION_TIMER,
+    APP_WATCH,
+    SHAKE_SHORTCUT,
+    VOLUME_SHORTCUT,
+    LOW_BATTERY_BLACKOUT,
+    CHARGER_AUTO_RULE,
+    KEEP_SCREEN_ON,
+    HAPTICS_AND_BOOT,
+    BACKUP_RESTORE
 }
 
 data class CustomProfile(
@@ -193,6 +297,10 @@ data class ShieldSettings(
     val emergencyHoldBypassEnabled: Boolean = true,
     val lockCountdownSeconds: Int = 0,
     val hudTimeoutMs: Long = 3000L,
+    // Kids Safety & Cooldown
+    val kidsSafetyEnabled: Boolean = false,
+    val wrongAttemptCooldownEnabled: Boolean = true,
+    val kidsLockOnTimerExpiry: Boolean = false,
     // Overlay Visuals & Display
     val overlayStyle: OverlayStyle = OverlayStyle.CLEAR_GLASS,
     val customDimPercent: Int = 0,
@@ -204,6 +312,12 @@ data class ShieldSettings(
     val borderPulseEnabled: Boolean = true,
     val badgeVisibilityMode: BadgeVisibilityMode = BadgeVisibilityMode.ALWAYS,
     val oledClockEnabled: Boolean = false,
+    // Partial Touch Zone & Privacy Veil
+    val partialZoneEnabled: Boolean = false,
+    val partialZonePreset: PartialZonePreset = PartialZonePreset.CENTER_WINDOW,
+    val partialZoneRect: NormalizedRect = NormalizedRect(),
+    val privacyVeilEnabled: Boolean = false,
+    val stealthBlackoutEnabled: Boolean = false,
     // Floating Bubble
     val floatingBubbleEnabled: Boolean = true,
     val floatingBubbleOpacity: Float = 0.85f,
@@ -222,6 +336,18 @@ data class ShieldSettings(
     val autoUnlockOnCallEnabled: Boolean = false,
     val reLockAfterCallEnabled: Boolean = false,
     val sessionTimerMinutes: Int = 0,
+    // App-Watch, Shake/Volume Shortcuts & Power Guard
+    val appWatchEnabled: Boolean = false,
+    val watchedAppPackages: Set<String> = DEFAULT_WATCHED_APPS,
+    val appWatchAction: AppWatchAction = AppWatchAction.SHOW_BUBBLE,
+    val appWatchAutoDisarmOnExit: Boolean = true,
+    val shakeToLockEnabled: Boolean = false,
+    val shakeToUnlockEnabled: Boolean = false,
+    val shakeSensitivity: ShakeSensitivity = ShakeSensitivity.MEDIUM,
+    val volumeDoublePressAction: VolumeShortcutAction = VolumeShortcutAction.OFF,
+    val lowBatteryBlackoutPercent: Int = 0,
+    val autoLockOnChargerConnect: Boolean = false,
+    val unlockOnChargerDisconnect: Boolean = false,
     // System, Appearance & Profiles
     val keepScreenOnEnabled: Boolean = true,
     val hapticFeedbackEnabled: Boolean = true,
@@ -230,6 +356,7 @@ data class ShieldSettings(
     val dynamicColorEnabled: Boolean = true,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM_AUTO,
     val hasCompletedOnboarding: Boolean = false,
+    val isAdvancedMode: Boolean = false,
     val customProfiles: List<CustomProfile> = emptyList(),
     // Stats & Analytics
     val totalBlockedTouches: Long = 0L,
@@ -239,6 +366,13 @@ data class ShieldSettings(
 ) {
     val darkThemeEnabled: Boolean
         get() = themeMode == ThemeMode.DARK
+
+    companion object {
+        val DEFAULT_WATCHED_APPS = setOf(
+            "com.google.android.youtube",
+            "com.google.android.apps.maps"
+        )
+    }
 }
 
 data class ShieldRuntimeState(
@@ -261,5 +395,8 @@ data class ShieldRuntimeState(
     val isFaceDown: Boolean = false,
     val isLandscape: Boolean = false,
     val isCharging: Boolean = false,
-    val batteryPercent: Int = 100
+    val batteryPercent: Int = 100,
+    val activeWatchedApp: String? = null,
+    val isLowBatteryBlackoutActive: Boolean = false,
+    val isKidsTimeUpLocked: Boolean = false
 )

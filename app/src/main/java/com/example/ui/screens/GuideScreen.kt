@@ -44,15 +44,15 @@ fun GuideScreen(
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         item {
             Text(
                 text = strings.guideTitle,
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(vertical = 4.dp)
+                modifier = Modifier.padding(vertical = 1.dp)
             )
         }
 
@@ -98,23 +98,23 @@ fun GuideScreen(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f))
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(9.dp),
                     verticalAlignment = Alignment.Top
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Security,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
                             text = strings.guideLimitsTitle,
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = strings.guideLimitsDesc,
                             style = MaterialTheme.typography.bodySmall,
@@ -128,24 +128,25 @@ fun GuideScreen(
         item {
             OutlinedButton(
                 onClick = onReplayOnboarding,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp)
+                    .height(40.dp)
                     .testTag("replay_onboarding_button"),
                 shape = MaterialTheme.shapes.medium
             ) {
                 Icon(
                     imageVector = Icons.Rounded.AutoAwesome,
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(strings.btnReplayOnboarding)
             }
         }
 
         item {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(6.dp))
         }
     }
 }
@@ -163,11 +164,11 @@ private fun GuideStepCard(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(9.dp),
             verticalAlignment = Alignment.Top
         ) {
             Surface(
-                modifier = Modifier.size(42.dp),
+                modifier = Modifier.size(30.dp),
                 shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.primaryContainer
             ) {
@@ -176,21 +177,21 @@ private fun GuideStepCard(
                         imageVector = icon,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

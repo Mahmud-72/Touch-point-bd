@@ -72,12 +72,41 @@ class ShieldPreferences(private val context: Context) {
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val APP_LANGUAGE = stringPreferencesKey("app_language")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+        val IS_ADVANCED_MODE = booleanPreferencesKey("is_advanced_mode")
         val CUSTOM_PROFILES_JSON = stringPreferencesKey("custom_profiles_json")
 
         val TOTAL_BLOCKED_TOUCHES = longPreferencesKey("total_blocked_touches")
         val TOTAL_LOCK_SESSIONS = longPreferencesKey("total_lock_sessions")
         val DAILY_BLOCKED_JSON = stringPreferencesKey("daily_blocked_json")
         val LOCK_SOURCE_COUNTS_JSON = stringPreferencesKey("lock_source_counts_json")
+
+        // Kids Safety & Cooldown
+        val KIDS_SAFETY_ENABLED = booleanPreferencesKey("kids_safety_enabled")
+        val WRONG_ATTEMPT_COOLDOWN = booleanPreferencesKey("wrong_attempt_cooldown")
+        val KIDS_LOCK_ON_TIMER_EXPIRY = booleanPreferencesKey("kids_lock_on_timer_expiry")
+
+        // Partial Touch Zone & Privacy Veil
+        val PARTIAL_ZONE_ENABLED = booleanPreferencesKey("partial_zone_enabled")
+        val PARTIAL_ZONE_PRESET = stringPreferencesKey("partial_zone_preset")
+        val PARTIAL_ZONE_LEFT = floatPreferencesKey("partial_zone_left")
+        val PARTIAL_ZONE_TOP = floatPreferencesKey("partial_zone_top")
+        val PARTIAL_ZONE_RIGHT = floatPreferencesKey("partial_zone_right")
+        val PARTIAL_ZONE_BOTTOM = floatPreferencesKey("partial_zone_bottom")
+        val PRIVACY_VEIL_ENABLED = booleanPreferencesKey("privacy_veil_enabled")
+        val STEALTH_BLACKOUT_ENABLED = booleanPreferencesKey("stealth_blackout_enabled")
+
+        // App-Watch, Shake/Volume & Power Guard
+        val APP_WATCH_ENABLED = booleanPreferencesKey("app_watch_enabled")
+        val WATCHED_APPS_JSON = stringPreferencesKey("watched_apps_json")
+        val APP_WATCH_ACTION = stringPreferencesKey("app_watch_action")
+        val APP_WATCH_AUTO_DISARM = booleanPreferencesKey("app_watch_auto_disarm")
+        val SHAKE_TO_LOCK = booleanPreferencesKey("shake_to_lock")
+        val SHAKE_TO_UNLOCK = booleanPreferencesKey("shake_to_unlock")
+        val SHAKE_SENSITIVITY = stringPreferencesKey("shake_sensitivity")
+        val VOLUME_DOUBLE_PRESS_ACTION = stringPreferencesKey("volume_double_press_action")
+        val LOW_BATTERY_BLACKOUT_PERCENT = intPreferencesKey("low_battery_blackout_percent")
+        val AUTO_LOCK_CHARGER_CONNECT = booleanPreferencesKey("auto_lock_charger_connect")
+        val UNLOCK_CHARGER_DISCONNECT = booleanPreferencesKey("unlock_charger_disconnect")
     }
 
     val settingsFlow: Flow<ShieldSettings> = context.shieldDataStore.data.map { prefs ->
@@ -131,11 +160,37 @@ class ShieldPreferences(private val context: Context) {
             dynamicColorEnabled = prefs[Keys.DYNAMIC_COLOR] ?: true,
             appLanguage = AppLanguage.fromKey(prefs[Keys.APP_LANGUAGE]),
             hasCompletedOnboarding = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
+            isAdvancedMode = prefs[Keys.IS_ADVANCED_MODE] ?: false,
             customProfiles = parseProfilesJson(prefs[Keys.CUSTOM_PROFILES_JSON]),
             totalBlockedTouches = prefs[Keys.TOTAL_BLOCKED_TOUCHES] ?: 0L,
             totalLockSessions = prefs[Keys.TOTAL_LOCK_SESSIONS] ?: 0L,
             dailyBlockedHistory = parseLongMapJson(prefs[Keys.DAILY_BLOCKED_JSON]),
-            lockSourceCounts = parseLongMapJson(prefs[Keys.LOCK_SOURCE_COUNTS_JSON])
+            lockSourceCounts = parseLongMapJson(prefs[Keys.LOCK_SOURCE_COUNTS_JSON]),
+            kidsSafetyEnabled = prefs[Keys.KIDS_SAFETY_ENABLED] ?: false,
+            wrongAttemptCooldownEnabled = prefs[Keys.WRONG_ATTEMPT_COOLDOWN] ?: true,
+            kidsLockOnTimerExpiry = prefs[Keys.KIDS_LOCK_ON_TIMER_EXPIRY] ?: false,
+            partialZoneEnabled = prefs[Keys.PARTIAL_ZONE_ENABLED] ?: false,
+            partialZonePreset = PartialZonePreset.fromKey(prefs[Keys.PARTIAL_ZONE_PRESET]),
+            partialZoneRect = NormalizedRect(
+                left = prefs[Keys.PARTIAL_ZONE_LEFT] ?: 0.08f,
+                top = prefs[Keys.PARTIAL_ZONE_TOP] ?: 0.22f,
+                right = prefs[Keys.PARTIAL_ZONE_RIGHT] ?: 0.92f,
+                bottom = prefs[Keys.PARTIAL_ZONE_BOTTOM] ?: 0.56f
+            ).clamped(),
+            privacyVeilEnabled = prefs[Keys.PRIVACY_VEIL_ENABLED] ?: false,
+            stealthBlackoutEnabled = prefs[Keys.STEALTH_BLACKOUT_ENABLED] ?: false,
+            appWatchEnabled = prefs[Keys.APP_WATCH_ENABLED] ?: false,
+            watchedAppPackages = parseStringSetJson(prefs[Keys.WATCHED_APPS_JSON])
+                ?: ShieldSettings.DEFAULT_WATCHED_APPS,
+            appWatchAction = AppWatchAction.fromKey(prefs[Keys.APP_WATCH_ACTION]),
+            appWatchAutoDisarmOnExit = prefs[Keys.APP_WATCH_AUTO_DISARM] ?: true,
+            shakeToLockEnabled = prefs[Keys.SHAKE_TO_LOCK] ?: false,
+            shakeToUnlockEnabled = prefs[Keys.SHAKE_TO_UNLOCK] ?: false,
+            shakeSensitivity = ShakeSensitivity.fromKey(prefs[Keys.SHAKE_SENSITIVITY]),
+            volumeDoublePressAction = VolumeShortcutAction.fromKey(prefs[Keys.VOLUME_DOUBLE_PRESS_ACTION]),
+            lowBatteryBlackoutPercent = (prefs[Keys.LOW_BATTERY_BLACKOUT_PERCENT] ?: 0).coerceIn(0, 30),
+            autoLockOnChargerConnect = prefs[Keys.AUTO_LOCK_CHARGER_CONNECT] ?: false,
+            unlockOnChargerDisconnect = prefs[Keys.UNLOCK_CHARGER_DISCONNECT] ?: false
         )
     }
 
@@ -320,6 +375,114 @@ class ShieldPreferences(private val context: Context) {
 
     suspend fun setOnboardingCompleted(completed: Boolean) {
         context.shieldDataStore.edit { it[Keys.ONBOARDING_COMPLETED] = completed }
+    }
+
+    suspend fun setAdvancedMode(enabled: Boolean) {
+        context.shieldDataStore.edit { it[Keys.IS_ADVANCED_MODE] = enabled }
+    }
+
+    // Kids Safety & Cooldown
+    suspend fun setKidsSafetyEnabled(enabled: Boolean) {
+        context.shieldDataStore.edit { it[Keys.KIDS_SAFETY_ENABLED] = enabled }
+    }
+
+    suspend fun setWrongAttemptCooldownEnabled(enabled: Boolean) {
+        context.shieldDataStore.edit { it[Keys.WRONG_ATTEMPT_COOLDOWN] = enabled }
+    }
+
+    suspend fun setKidsLockOnTimerExpiry(enabled: Boolean) {
+        context.shieldDataStore.edit { it[Keys.KIDS_LOCK_ON_TIMER_EXPIRY] = enabled }
+    }
+
+    // Partial Touch Zone & Privacy Veil
+    suspend fun setPartialZoneEnabled(enabled: Boolean) {
+        context.shieldDataStore.edit { prefs ->
+            prefs[Keys.PARTIAL_ZONE_ENABLED] = enabled
+            if (enabled && prefs[Keys.PARTIAL_ZONE_PRESET] == PartialZonePreset.FULL_LOCK.storageKey) {
+                prefs[Keys.PARTIAL_ZONE_PRESET] = PartialZonePreset.CENTER_WINDOW.storageKey
+            }
+        }
+    }
+
+    suspend fun setPartialZonePreset(preset: PartialZonePreset) {
+        context.shieldDataStore.edit { prefs ->
+            prefs[Keys.PARTIAL_ZONE_PRESET] = preset.storageKey
+            prefs[Keys.PARTIAL_ZONE_ENABLED] = (preset != PartialZonePreset.FULL_LOCK)
+        }
+    }
+
+    suspend fun setPartialZoneRect(rect: NormalizedRect) {
+        val clamped = rect.clamped()
+        context.shieldDataStore.edit { prefs ->
+            prefs[Keys.PARTIAL_ZONE_LEFT] = clamped.left
+            prefs[Keys.PARTIAL_ZONE_TOP] = clamped.top
+            prefs[Keys.PARTIAL_ZONE_RIGHT] = clamped.right
+            prefs[Keys.PARTIAL_ZONE_BOTTOM] = clamped.bottom
+            prefs[Keys.PARTIAL_ZONE_PRESET] = PartialZonePreset.CUSTOM.storageKey
+            prefs[Keys.PARTIAL_ZONE_ENABLED] = true
+        }
+    }
+
+    suspend fun setPrivacyVeilEnabled(enabled: Boolean) {
+        context.shieldDataStore.edit { it[Keys.PRIVACY_VEIL_ENABLED] = enabled }
+    }
+
+    suspend fun setStealthBlackoutEnabled(enabled: Boolean) {
+        context.shieldDataStore.edit { it[Keys.STEALTH_BLACKOUT_ENABLED] = enabled }
+    }
+
+    // App-Watch, Shake/Volume & Power Guard
+    suspend fun setAppWatchEnabled(enabled: Boolean) {
+        context.shieldDataStore.edit { it[Keys.APP_WATCH_ENABLED] = enabled }
+    }
+
+    suspend fun setWatchedAppPackages(packages: Set<String>) {
+        val cleaned = packages.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        context.shieldDataStore.edit { it[Keys.WATCHED_APPS_JSON] = encodeStringSetJson(cleaned) }
+    }
+
+    suspend fun toggleWatchedAppPackage(packageName: String) {
+        val current = settingsFlow.first().watchedAppPackages.toMutableSet()
+        if (!current.add(packageName)) {
+            current.remove(packageName)
+        }
+        setWatchedAppPackages(current)
+    }
+
+    suspend fun setAppWatchAction(action: AppWatchAction) {
+        context.shieldDataStore.edit { it[Keys.APP_WATCH_ACTION] = action.storageKey }
+    }
+
+    suspend fun setAppWatchAutoDisarmOnExit(enabled: Boolean) {
+        context.shieldDataStore.edit { it[Keys.APP_WATCH_AUTO_DISARM] = enabled }
+    }
+
+    suspend fun setShakeToLockEnabled(enabled: Boolean) {
+        context.shieldDataStore.edit { it[Keys.SHAKE_TO_LOCK] = enabled }
+    }
+
+    suspend fun setShakeToUnlockEnabled(enabled: Boolean) {
+        context.shieldDataStore.edit { it[Keys.SHAKE_TO_UNLOCK] = enabled }
+    }
+
+    suspend fun setShakeSensitivity(sensitivity: ShakeSensitivity) {
+        context.shieldDataStore.edit { it[Keys.SHAKE_SENSITIVITY] = sensitivity.storageKey }
+    }
+
+    suspend fun setVolumeDoublePressAction(action: VolumeShortcutAction) {
+        context.shieldDataStore.edit { it[Keys.VOLUME_DOUBLE_PRESS_ACTION] = action.storageKey }
+    }
+
+    suspend fun setLowBatteryBlackoutPercent(percent: Int) {
+        context.shieldDataStore.edit { it[Keys.LOW_BATTERY_BLACKOUT_PERCENT] = percent.coerceIn(0, 30) }
+    }
+
+    suspend fun setAutoLockOnChargerConnect(enabled: Boolean) {
+        context.shieldDataStore.edit { it[Keys.AUTO_LOCK_CHARGER_CONNECT] = enabled }
+    }
+
+    suspend fun setUnlockOnChargerDisconnect(enabled: Boolean) {
+        context.shieldDataStore.edit { it[Keys.UNLOCK_CHARGER_DISCONNECT] = enabled }
     }
 
     suspend fun applySmartPreset(preset: SmartPreset) {
@@ -564,6 +727,29 @@ class ShieldPreferences(private val context: Context) {
             put("dynamicColorEnabled", s.dynamicColorEnabled)
             put("appLanguage", s.appLanguage.storageKey)
             put("customProfilesJson", encodeProfilesJson(s.customProfiles))
+            put("kidsSafetyEnabled", s.kidsSafetyEnabled)
+            put("wrongAttemptCooldownEnabled", s.wrongAttemptCooldownEnabled)
+            put("kidsLockOnTimerExpiry", s.kidsLockOnTimerExpiry)
+            put("partialZoneEnabled", s.partialZoneEnabled)
+            put("partialZonePreset", s.partialZonePreset.storageKey)
+            put("partialZoneLeft", s.partialZoneRect.left.toDouble())
+            put("partialZoneTop", s.partialZoneRect.top.toDouble())
+            put("partialZoneRight", s.partialZoneRect.right.toDouble())
+            put("partialZoneBottom", s.partialZoneRect.bottom.toDouble())
+            put("privacyVeilEnabled", s.privacyVeilEnabled)
+            put("stealthBlackoutEnabled", s.stealthBlackoutEnabled)
+            put("appWatchEnabled", s.appWatchEnabled)
+            put("watchedAppPackagesJson", encodeStringSetJson(s.watchedAppPackages))
+            put("appWatchAction", s.appWatchAction.storageKey)
+            put("appWatchAutoDisarmOnExit", s.appWatchAutoDisarmOnExit)
+            put("shakeToLockEnabled", s.shakeToLockEnabled)
+            put("shakeToUnlockEnabled", s.shakeToUnlockEnabled)
+            put("shakeSensitivity", s.shakeSensitivity.storageKey)
+            put("volumeDoublePressAction", s.volumeDoublePressAction.storageKey)
+            put("lowBatteryBlackoutPercent", s.lowBatteryBlackoutPercent)
+            put("autoLockOnChargerConnect", s.autoLockOnChargerConnect)
+            put("unlockOnChargerDisconnect", s.unlockOnChargerDisconnect)
+            put("isAdvancedMode", s.isAdvancedMode)
         }.toString(2)
     }
 
@@ -634,6 +820,41 @@ class ShieldPreferences(private val context: Context) {
                     val profiles = parseProfilesJson(obj.optString("customProfilesJson"))
                     prefs[Keys.CUSTOM_PROFILES_JSON] = encodeProfilesJson(profiles)
                 }
+                if (obj.has("kidsSafetyEnabled")) prefs[Keys.KIDS_SAFETY_ENABLED] = obj.optBoolean("kidsSafetyEnabled", false)
+                if (obj.has("wrongAttemptCooldownEnabled")) prefs[Keys.WRONG_ATTEMPT_COOLDOWN] = obj.optBoolean("wrongAttemptCooldownEnabled", true)
+                if (obj.has("kidsLockOnTimerExpiry")) prefs[Keys.KIDS_LOCK_ON_TIMER_EXPIRY] = obj.optBoolean("kidsLockOnTimerExpiry", false)
+                if (obj.has("partialZoneEnabled")) prefs[Keys.PARTIAL_ZONE_ENABLED] = obj.optBoolean("partialZoneEnabled", false)
+                if (obj.has("partialZonePreset")) prefs[Keys.PARTIAL_ZONE_PRESET] = PartialZonePreset.fromKey(obj.optString("partialZonePreset")).storageKey
+                if (obj.has("partialZoneLeft") && obj.has("partialZoneTop") && obj.has("partialZoneRight") && obj.has("partialZoneBottom")) {
+                    val rect = NormalizedRect(
+                        left = obj.optDouble("partialZoneLeft", 0.08).toFloat(),
+                        top = obj.optDouble("partialZoneTop", 0.22).toFloat(),
+                        right = obj.optDouble("partialZoneRight", 0.92).toFloat(),
+                        bottom = obj.optDouble("partialZoneBottom", 0.56).toFloat()
+                    ).clamped()
+                    prefs[Keys.PARTIAL_ZONE_LEFT] = rect.left
+                    prefs[Keys.PARTIAL_ZONE_TOP] = rect.top
+                    prefs[Keys.PARTIAL_ZONE_RIGHT] = rect.right
+                    prefs[Keys.PARTIAL_ZONE_BOTTOM] = rect.bottom
+                }
+                if (obj.has("privacyVeilEnabled")) prefs[Keys.PRIVACY_VEIL_ENABLED] = obj.optBoolean("privacyVeilEnabled", false)
+                if (obj.has("stealthBlackoutEnabled")) prefs[Keys.STEALTH_BLACKOUT_ENABLED] = obj.optBoolean("stealthBlackoutEnabled", false)
+                if (obj.has("appWatchEnabled")) prefs[Keys.APP_WATCH_ENABLED] = obj.optBoolean("appWatchEnabled", false)
+                if (obj.has("watchedAppPackagesJson")) {
+                    parseStringSetJson(obj.optString("watchedAppPackagesJson"))?.let {
+                        prefs[Keys.WATCHED_APPS_JSON] = encodeStringSetJson(it)
+                    }
+                }
+                if (obj.has("appWatchAction")) prefs[Keys.APP_WATCH_ACTION] = AppWatchAction.fromKey(obj.optString("appWatchAction")).storageKey
+                if (obj.has("appWatchAutoDisarmOnExit")) prefs[Keys.APP_WATCH_AUTO_DISARM] = obj.optBoolean("appWatchAutoDisarmOnExit", true)
+                if (obj.has("shakeToLockEnabled")) prefs[Keys.SHAKE_TO_LOCK] = obj.optBoolean("shakeToLockEnabled", false)
+                if (obj.has("shakeToUnlockEnabled")) prefs[Keys.SHAKE_TO_UNLOCK] = obj.optBoolean("shakeToUnlockEnabled", false)
+                if (obj.has("shakeSensitivity")) prefs[Keys.SHAKE_SENSITIVITY] = ShakeSensitivity.fromKey(obj.optString("shakeSensitivity")).storageKey
+                if (obj.has("volumeDoublePressAction")) prefs[Keys.VOLUME_DOUBLE_PRESS_ACTION] = VolumeShortcutAction.fromKey(obj.optString("volumeDoublePressAction")).storageKey
+                if (obj.has("lowBatteryBlackoutPercent")) prefs[Keys.LOW_BATTERY_BLACKOUT_PERCENT] = obj.optInt("lowBatteryBlackoutPercent", 0).coerceIn(0, 30)
+                if (obj.has("autoLockOnChargerConnect")) prefs[Keys.AUTO_LOCK_CHARGER_CONNECT] = obj.optBoolean("autoLockOnChargerConnect", false)
+                if (obj.has("unlockOnChargerDisconnect")) prefs[Keys.UNLOCK_CHARGER_DISCONNECT] = obj.optBoolean("unlockOnChargerDisconnect", false)
+                if (obj.has("isAdvancedMode")) prefs[Keys.IS_ADVANCED_MODE] = obj.optBoolean("isAdvancedMode", false)
             }
             true
         } catch (_: Exception) {
@@ -718,6 +939,27 @@ class ShieldPreferences(private val context: Context) {
         val obj = JSONObject()
         map.forEach { (k, v) -> obj.put(k, v) }
         return obj.toString()
+    }
+
+    private fun parseStringSetJson(raw: String?): Set<String>? {
+        if (raw == null) return null
+        return try {
+            val arr = JSONArray(raw)
+            buildSet {
+                for (i in 0 until arr.length()) {
+                    val v = arr.optString(i, "").trim()
+                    if (v.isNotEmpty()) add(v)
+                }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun encodeStringSetJson(values: Set<String>): String {
+        val arr = JSONArray()
+        values.forEach { arr.put(it) }
+        return arr.toString()
     }
 
     companion object {

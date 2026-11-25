@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.AppLanguage
+import com.example.data.AppWatchAction
 import com.example.data.BadgeVisibilityMode
 import com.example.data.BorderColorOption
 import com.example.data.BorderStyle
@@ -14,19 +15,28 @@ import com.example.data.BorderThickness
 import com.example.data.BubbleSize
 import com.example.data.BubbleStyle
 import com.example.data.LockSource
+import com.example.data.NormalizedRect
 import com.example.data.OverlayStyle
+import com.example.data.PartialZonePreset
+import com.example.data.SettingHelpTopic
 import com.example.data.SettingsSection
+import com.example.data.ShakeSensitivity
 import com.example.data.ShieldPreferences
 import com.example.data.ShieldStateHolder
 import com.example.data.SmartPreset
 import com.example.data.ThemeMode
 import com.example.data.UnlockMethod
+import com.example.data.VolumeShortcutAction
+import com.example.sensor.PocketSensorManager
 import com.example.service.BiometricUnlockActivity
 import com.example.service.BootReceiver
+import com.example.service.PartialZoneGeometry
 import com.example.service.ShortcutActionActivity
 import com.example.service.TouchLockWidgetProvider
 import com.example.service.TouchShieldService
 import com.example.service.TouchShieldTileService
+import com.example.service.VolumeShortcutMonitor
+import com.example.service.WrongAttemptCooldownTracker
 import com.example.ui.getAppStrings
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -62,8 +72,11 @@ class ExampleRobolectricTest {
         assertTrue(permissions.contains(Manifest.permission.READ_PHONE_STATE))
         assertTrue(permissions.contains(Manifest.permission.RECEIVE_BOOT_COMPLETED))
         assertTrue(permissions.contains(Manifest.permission.USE_BIOMETRIC))
-        // Privacy guarantee: no INTERNET permission
+        assertTrue(permissions.contains(Manifest.permission.PACKAGE_USAGE_STATS))
+        // Play-Safe & Privacy guarantees: no INTERNET, no QUERY_ALL_PACKAGES, no AccessibilityService
         assertFalse(permissions.contains(Manifest.permission.INTERNET))
+        assertFalse(permissions.contains(Manifest.permission.QUERY_ALL_PACKAGES))
+        assertFalse(permissions.contains(Manifest.permission.BIND_ACCESSIBILITY_SERVICE))
 
         assertNotNull(pm.getServiceInfo(ComponentName(context, TouchShieldService::class.java), 0))
         assertNotNull(pm.getServiceInfo(ComponentName(context, TouchShieldTileService::class.java), 0))
@@ -367,7 +380,200 @@ class ExampleRobolectricTest {
             LockSource.entries.filter { it != LockSource.NONE }.forEach { src ->
                 assertTrue(strings.lockSourceLabel(src).isNotBlank())
             }
+            PartialZonePreset.entries.forEach { pz ->
+                assertTrue(strings.partialZonePresetLabel(pz).isNotBlank())
+            }
+            AppWatchAction.entries.forEach { act ->
+                assertTrue(strings.appWatchActionLabel(act).isNotBlank())
+            }
+            ShakeSensitivity.entries.forEach { sens ->
+                assertTrue(strings.shakeSensitivityLabel(sens).isNotBlank())
+            }
+            VolumeShortcutAction.entries.forEach { vol ->
+                assertTrue(strings.volumeShortcutLabel(vol).isNotBlank())
+            }
+            assertTrue(strings.overlayPinCooldownWait(15).contains("15"))
+            assertTrue(strings.watchedAppsSummary(3).contains("3"))
+            assertTrue(strings.usageAccessDisclosureTitle.isNotBlank())
+            assertTrue(strings.usageAccessDisclosureBody.isNotBlank())
+            assertTrue(strings.overlayBtnQuickPeek.isNotBlank())
+            assertTrue(strings.overlayKidsTimeUpTitle.isNotBlank())
+            assertTrue(strings.overlayLowBatteryBlackoutBadge.isNotBlank())
+            assertTrue(strings.diagUsageAccess.isNotBlank())
+            assertTrue(strings.modeEasyLabel.isNotBlank())
+            assertTrue(strings.modeProLabel.isNotBlank())
+            assertTrue(strings.modeEasySubtitle.isNotBlank())
+            assertTrue(strings.modeProSubtitle.isNotBlank())
+            assertTrue(strings.dashUnlockProTilesHint.isNotBlank())
+            assertTrue(strings.proBadgeLabel.isNotBlank())
+            assertTrue(strings.helpActionDesc.isNotBlank())
+            assertTrue(strings.helpSectionWhat.isNotBlank())
+            assertTrue(strings.helpSectionExample.isNotBlank())
+            assertTrue(strings.helpSectionTip.isNotBlank())
+            assertTrue(strings.helpCloseBtn.isNotBlank())
+
+            assertEquals(36, SettingHelpTopic.entries.size)
+            SettingHelpTopic.entries.forEach { topic ->
+                val help = strings.helpContent(topic)
+                assertTrue("Blank title for $lang/$topic", help.title.isNotBlank())
+                assertTrue("Blank whatItDoes for $lang/$topic", help.whatItDoes.isNotBlank())
+                assertTrue("Blank exampleUse for $lang/$topic", help.exampleUse.isNotBlank())
+                assertTrue("Blank adviceTip for $lang/$topic", help.adviceTip.isNotBlank())
+            }
         }
+    }
+
+    @Test
+    fun `pro preferences persist and survive json backup round trip`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = ShieldPreferences(context)
+        prefs.restoreDefaults()
+        assertFalse(prefs.settingsFlow.first().isAdvancedMode)
+
+        prefs.setAdvancedMode(true)
+        prefs.setKidsSafetyEnabled(true)
+        prefs.setWrongAttemptCooldownEnabled(true)
+        prefs.setKidsLockOnTimerExpiry(true)
+        prefs.setPartialZoneEnabled(true)
+        prefs.setPartialZonePreset(PartialZonePreset.CUSTOM)
+        prefs.setPartialZoneRect(NormalizedRect(0.10f, 0.25f, 0.90f, 0.70f))
+        prefs.setPrivacyVeilEnabled(true)
+        prefs.setStealthBlackoutEnabled(true)
+        prefs.setAppWatchEnabled(true)
+        prefs.toggleWatchedAppPackage("com.netflix.mediaclient")
+        prefs.setAppWatchAction(AppWatchAction.AUTO_LOCK)
+        prefs.setAppWatchAutoDisarmOnExit(false)
+        prefs.setShakeToLockEnabled(true)
+        prefs.setShakeToUnlockEnabled(true)
+        prefs.setShakeSensitivity(ShakeSensitivity.HIGH)
+        prefs.setVolumeDoublePressAction(VolumeShortcutAction.TOGGLE_LOCK)
+        prefs.setLowBatteryBlackoutPercent(15)
+        prefs.setAutoLockOnChargerConnect(true)
+        prefs.setUnlockOnChargerDisconnect(true)
+
+        val updated = prefs.settingsFlow.first()
+        assertTrue(updated.isAdvancedMode)
+        assertTrue(updated.kidsSafetyEnabled)
+        assertTrue(updated.wrongAttemptCooldownEnabled)
+        assertTrue(updated.kidsLockOnTimerExpiry)
+        assertTrue(updated.partialZoneEnabled)
+        assertEquals(PartialZonePreset.CUSTOM, updated.partialZonePreset)
+        assertEquals(0.10f, updated.partialZoneRect.left, 0.01f)
+        assertEquals(0.70f, updated.partialZoneRect.bottom, 0.01f)
+        assertTrue(updated.privacyVeilEnabled)
+        assertTrue(updated.stealthBlackoutEnabled)
+        assertTrue(updated.appWatchEnabled)
+        assertTrue("com.netflix.mediaclient" in updated.watchedAppPackages)
+        assertEquals(AppWatchAction.AUTO_LOCK, updated.appWatchAction)
+        assertFalse(updated.appWatchAutoDisarmOnExit)
+        assertTrue(updated.shakeToLockEnabled)
+        assertTrue(updated.shakeToUnlockEnabled)
+        assertEquals(ShakeSensitivity.HIGH, updated.shakeSensitivity)
+        assertEquals(VolumeShortcutAction.TOGGLE_LOCK, updated.volumeDoublePressAction)
+        assertEquals(15, updated.lowBatteryBlackoutPercent)
+        assertTrue(updated.autoLockOnChargerConnect)
+        assertTrue(updated.unlockOnChargerDisconnect)
+
+        val json = prefs.exportSettingsJson()
+        prefs.restoreDefaults()
+        assertFalse(prefs.settingsFlow.first().isAdvancedMode)
+        assertFalse(prefs.settingsFlow.first().kidsSafetyEnabled)
+
+        assertTrue(prefs.importSettingsJson(json))
+        val reimported = prefs.settingsFlow.first()
+        assertTrue(reimported.isAdvancedMode)
+        assertTrue(reimported.kidsSafetyEnabled)
+        assertEquals(PartialZonePreset.CUSTOM, reimported.partialZonePreset)
+        assertEquals(AppWatchAction.AUTO_LOCK, reimported.appWatchAction)
+        assertEquals(ShakeSensitivity.HIGH, reimported.shakeSensitivity)
+        assertEquals(VolumeShortcutAction.TOGGLE_LOCK, reimported.volumeDoublePressAction)
+        assertEquals(15, reimported.lowBatteryBlackoutPercent)
+        assertTrue(reimported.autoLockOnChargerConnect)
+        assertTrue(reimported.unlockOnChargerDisconnect)
+        assertTrue("com.netflix.mediaclient" in reimported.watchedAppPackages)
+    }
+
+    @Test
+    fun `partial zone four strip geometry computes accurate cutouts`() {
+        val topHalf = PartialZoneGeometry.computeFourStripLayout(
+            screenWidthPx = 1080,
+            screenHeightPx = 2400,
+            preset = PartialZonePreset.TOP_HALF,
+            customRect = NormalizedRect()
+        )
+        assertNotNull(topHalf.topStrip)
+        assertNotNull(topHalf.bottomStrip)
+        assertTrue(topHalf.cutout.width > 900)
+        assertTrue(topHalf.cutout.height > 900)
+        assertEquals(topHalf.cutout.top + topHalf.cutout.height, topHalf.bottomStrip!!.top)
+
+        val bottomHalf = PartialZoneGeometry.computeFourStripLayout(
+            screenWidthPx = 1080,
+            screenHeightPx = 2400,
+            preset = PartialZonePreset.BOTTOM_HALF,
+            customRect = NormalizedRect()
+        )
+        assertNotNull(bottomHalf.topStrip)
+        assertTrue(bottomHalf.cutout.top >= 1100)
+
+        val center = PartialZoneGeometry.computeFourStripLayout(
+            screenWidthPx = 1000,
+            screenHeightPx = 2000,
+            preset = PartialZonePreset.CENTER_WINDOW,
+            customRect = NormalizedRect()
+        )
+        assertNotNull(center.topStrip)
+        assertNotNull(center.bottomStrip)
+        assertNotNull(center.leftStrip)
+        assertNotNull(center.rightStrip)
+
+        val custom = PartialZoneGeometry.computeFourStripLayout(
+            screenWidthPx = 1000,
+            screenHeightPx = 2000,
+            preset = PartialZonePreset.CUSTOM,
+            customRect = NormalizedRect(0.20f, 0.25f, 0.80f, 0.75f)
+        )
+        assertEquals(200, custom.cutout.left)
+        assertEquals(500, custom.cutout.top)
+        assertEquals(600, custom.cutout.width)
+        assertEquals(1000, custom.cutout.height)
+    }
+
+    @Test
+    fun `wrong attempt cooldown shake math and volume double press work deterministically`() {
+        val tracker = WrongAttemptCooldownTracker()
+        repeat(4) { idx ->
+            assertEquals(0, tracker.recordWrongAttempt(nowMs = 1000L + idx * 100L))
+        }
+        assertEquals(15, tracker.recordWrongAttempt(nowMs = 2000L))
+        assertTrue(tracker.isCoolingDown(nowMs = 3000L))
+        assertEquals(14, tracker.remainingCooldownSeconds(nowMs = 3000L))
+        assertEquals(0, tracker.remainingCooldownSeconds(nowMs = 20000L))
+
+        tracker.recordWrongAttempt(nowMs = 21000L) // 6th
+        tracker.recordWrongAttempt(nowMs = 22000L) // 7th
+        assertEquals(30, tracker.recordWrongAttempt(nowMs = 23000L)) // 8th
+        tracker.reset()
+        assertFalse(tracker.isCoolingDown(nowMs = 24000L))
+        assertEquals(0, tracker.wrongAttempts)
+
+        // Shake spike calculation
+        val calm = PocketSensorManager.computeAccelerationMagnitude(0f, 0f, 9.8f)
+        val hardShake = PocketSensorManager.computeAccelerationMagnitude(14f, 14f, 12f)
+        assertFalse(PocketSensorManager.isShakeSpike(calm, ShakeSensitivity.MEDIUM.gThreshold))
+        assertTrue(PocketSensorManager.isShakeSpike(hardShake, ShakeSensitivity.MEDIUM.gThreshold))
+
+        // Volume double-press timing & cooldown
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        var fires = 0
+        val monitor = VolumeShortcutMonitor(context) { fires += 1 }
+        assertFalse(monitor.registerVolumeChangeEvent(stream = 3, nowMs = 10_000L))
+        assertTrue(monitor.registerVolumeChangeEvent(stream = 3, nowMs = 10_220L))
+        assertEquals(1, fires)
+        // Immediate follow-up inside cooldown should not fire
+        assertFalse(monitor.registerVolumeChangeEvent(stream = 3, nowMs = 10_450L))
+        assertFalse(monitor.registerVolumeChangeEvent(stream = 3, nowMs = 10_650L))
+        assertEquals(1, fires)
     }
 
     @Test

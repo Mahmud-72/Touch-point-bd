@@ -113,12 +113,12 @@ fun AnalyticsCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { expanded = !expanded }
-                    .padding(16.dp)
+                    .padding(horizontal = 10.dp, vertical = 7.dp)
                     .testTag("analytics_expand_toggle"),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    modifier = Modifier.size(38.dp),
+                    modifier = Modifier.size(28.dp),
                     shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.primaryContainer
                 ) {
@@ -127,11 +127,11 @@ fun AnalyticsCard(
                             imageVector = Icons.Rounded.BarChart,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = strings.analyticsTitle,
@@ -149,7 +149,8 @@ fun AnalyticsCard(
                 Icon(
                     imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
                 )
             }
 
@@ -158,9 +159,9 @@ fun AnalyticsCard(
                 enter = expandVertically(),
                 exit = shrinkVertically()
             ) {
-                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                Column(modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 8.dp)) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(7.dp))
 
                     if (!hasChartData) {
                         Surface(
@@ -173,7 +174,7 @@ fun AnalyticsCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp)
+                                    .padding(8.dp)
                             )
                         }
                     } else {
@@ -193,12 +194,12 @@ fun AnalyticsCard(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(3.dp))
 
                         Canvas(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(82.dp)
+                                .height(64.dp)
                         ) {
                             val count = entries.size.coerceAtLeast(1)
                             val slotWidth = size.width / count
@@ -245,16 +246,16 @@ fun AnalyticsCard(
                     }
 
                     if (topSources.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = strings.analyticsSourcesTitle,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             topSources.forEach { (source, count) ->
                                 Surface(
@@ -265,7 +266,7 @@ fun AnalyticsCard(
                                         text = "${strings.lockSourceLabel(source)} • $count",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                                     )
                                 }
                             }

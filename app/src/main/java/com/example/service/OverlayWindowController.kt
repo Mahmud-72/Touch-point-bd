@@ -40,6 +40,7 @@ import com.example.R
 import com.example.data.BadgeVisibilityMode
 import com.example.data.BorderStyle
 import com.example.data.BubbleStyle
+import com.example.data.PartialZonePreset
 import com.example.data.ShieldSettings
 import com.example.data.UnlockMethod
 import com.example.ui.getAppStrings
@@ -80,6 +81,10 @@ class OverlayWindowController(
 
     private var lockOverlayView: FrameLayout? = null
     private var lockOverlayParams: WindowManager.LayoutParams? = null
+    private val partialStripViews = mutableListOf<View>()
+    private var partialCutoutOutlineView: BorderOverlayView? = null
+    private var partialHudOverlayView: FrameLayout? = null
+
     private var unlockHudContainer: LinearLayout? = null
     private var statusBadgePill: TextView? = null
     private var borderFrameView: BorderOverlayView? = null
@@ -89,16 +94,28 @@ class OverlayWindowController(
     private var oledBatteryText: TextView? = null
     private var oledClockRunnable: Runnable? = null
     private var hideHudRunnable: Runnable? = null
+    private var quickPeekRunnable: Runnable? = null
+    private var pinCooldownRunnable: Runnable? = null
 
     private var currentSettings = ShieldSettings()
+    private var lowBatteryBlackoutActive = false
+    private var kidsTimeUpLocked = false
+    private var isQuickPeeking = false
+    private var activeOverlaySignature: String? = null
+    private val cooldownTracker = WrongAttemptCooldownTracker()
 
     fun updateSettings(
         settings: ShieldSettings,
         isServiceArmed: Boolean,
         isScreenLocked: Boolean,
-        isBubbleTemporarilyHidden: Boolean
+        isBubbleTemporarilyHidden: Boolean,
+        isLowBatteryBlackoutActive: Boolean = false,
+        isKidsTimeUpLocked: Boolean = false
     ) {
         currentSettings = settings
+        lowBatteryBlackoutActive = isLowBatteryBlackoutActive
+        kidsTimeUpLocked = isKidsTimeUpLocked
+
         if (!canDrawOverlays()) {
             removeAllOverlays()
             return
@@ -107,12 +124,18 @@ class OverlayWindowController(
         if (isScreenLocked) {
             hideCountdownOverlay()
             hideFloatingBubble()
-            if (lockOverlayView == null) {
+            val desiredSig = overlayStructureSignature()
+            val hasExistingLock = lockOverlayView != null || partialStripViews.isNotEmpty()
+            if (!hasExistingLock) {
+                showTouchLockOverlay()
+            } else if (activeOverlaySignature != desiredSig) {
+                hideTouchLockOverlay()
                 showTouchLockOverlay()
             } else {
                 refreshTouchLockOverlayAppearance()
             }
         } else {
+            cooldownTracker.reset()
             hideTouchLockOverlay()
             if (isServiceArmed && settings.floatingBubbleEnabled && !isBubbleTemporarilyHidden) {
                 val styleChanged = lastBubbleSizeKey != settings.bubbleSize.storageKey ||
@@ -138,6 +161,32 @@ class OverlayWindowController(
                 hideFloatingBubble()
             }
         }
+    }
+
+    private fun isPartialZoneRenderActive(): Boolean =
+        currentSettings.partialZoneEnabled &&
+            currentSettings.partialZonePreset != PartialZonePreset.FULL_LOCK &&
+            !lowBatteryBlackoutActive &&
+            !kidsTimeUpLocked
+
+    private fun shouldShowQuickPeekButton(): Boolean =
+        !isPartialZoneRenderActive() &&
+            (currentSettings.privacyVeilEnabled || lowBatteryBlackoutActive || currentSettings.customDimPercent >= 65)
+
+    private fun effectiveUnlockMethod(): UnlockMethod =
+        if (kidsTimeUpLocked) UnlockMethod.PIN else currentSettings.unlockMethod
+
+    private fun overlayStructureSignature(): String {
+        val partialKey = if (isPartialZoneRenderActive()) {
+            val r = currentSettings.partialZoneRect.clamped()
+            "partial:${currentSettings.partialZonePreset.storageKey}:${r.left}:${r.top}:${r.right}:${r.bottom}"
+        } else {
+            "full"
+        }
+        return "$partialKey|kidsUp=$kidsTimeUpLocked|method=${effectiveUnlockMethod().storageKey}|" +
+            "kidsSafe=${currentSettings.kidsSafetyEnabled}|bio=${currentSettings.biometricUnlockEnabled}|" +
+            "bypass=${currentSettings.emergencyHoldBypassEnabled}|color=${currentSettings.borderColor.colorArgb}|" +
+            "lang=${currentSettings.appLanguage.storageKey}|peek=${shouldShowQuickPeekButton()}"
     }
 
     fun showCountdownOverlay(secondsRemaining: Int) {
@@ -202,7 +251,7 @@ class OverlayWindowController(
     }
 
     fun onConfigurationChanged() {
-        if (lockOverlayView != null) {
+        if (lockOverlayView != null || partialStripViews.isNotEmpty()) {
             hideTouchLockOverlay()
             showTouchLockOverlay()
         }
@@ -226,16 +275,28 @@ class OverlayWindowController(
 
     @SuppressLint("ClickableViewAccessibility")
     fun showTouchLockOverlay() {
-        if (!canDrawOverlays() || lockOverlayView != null) return
+        if (!canDrawOverlays()) return
+        if (lockOverlayView != null || partialStripViews.isNotEmpty()) return
 
+        activeOverlaySignature = overlayStructureSignature()
+        if (isPartialZoneRenderActive()) {
+            showPartialZoneOverlay()
+        } else {
+            showFullScreenOverlay()
+        }
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun showFullScreenOverlay() {
         val strings = getAppStrings(currentSettings.appLanguage)
+        val stealthHidden = isStealthHidden()
+
         val root = FrameLayout(overlayContext).apply {
             setBackgroundColor(overlayBackgroundColor())
             isClickable = true
             isFocusable = false
         }
 
-        // 1. Edge Border View (Full Glow OR Corner Brackets + Optional Pulse)
         val borderView = BorderOverlayView(overlayContext).apply {
             configure(
                 color = applyAlpha(currentSettings.borderColor.colorArgb, 0xCC),
@@ -247,7 +308,7 @@ class OverlayWindowController(
                 cornerRadiusPx = dp(18).toFloat(),
                 style = currentSettings.borderStyle
             )
-            visibility = if (currentSettings.borderEnabled) View.VISIBLE else View.GONE
+            visibility = if (currentSettings.borderEnabled && !stealthHidden) View.VISIBLE else View.GONE
             alpha = 0.85f
         }
         root.addView(
@@ -260,16 +321,15 @@ class OverlayWindowController(
             }
         )
 
-        // 2. OLED Clock & Battery Info Overlay (Subtle centered HUD)
         val oledBox = LinearLayout(overlayContext).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(22), dp(14), dp(22), dp(14))
+            setPadding(dp(12), dp(8), dp(12), dp(8))
             background = GradientDrawable().apply {
                 setColor(0x6605080E)
-                cornerRadius = dp(20).toFloat()
+                cornerRadius = dp(16).toFloat()
             }
-            visibility = if (currentSettings.oledClockEnabled) View.VISIBLE else View.GONE
+            visibility = if (currentSettings.oledClockEnabled && !stealthHidden) View.VISIBLE else View.GONE
             alpha = 0.78f
         }
         val clockTv = TextView(overlayContext).apply {
@@ -296,25 +356,7 @@ class OverlayWindowController(
             }
         )
 
-        // 3. Top Status Badge
-        val topBadge = TextView(overlayContext).apply {
-            text = "🔒 ${strings.overlayTouchBlockedTitle}"
-            setTextColor(0xFFFFFFFF.toInt())
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(14), dp(6), dp(14), dp(6))
-            background = GradientDrawable().apply {
-                setColor(0xB80F172A.toInt())
-                cornerRadius = dp(50).toFloat()
-                setStroke(dp(1), applyAlpha(currentSettings.borderColor.colorArgb, 0x80))
-            }
-            visibility = when (currentSettings.badgeVisibilityMode) {
-                BadgeVisibilityMode.ALWAYS -> View.VISIBLE
-                BadgeVisibilityMode.ON_TOUCH -> View.VISIBLE
-                BadgeVisibilityMode.HIDDEN -> View.GONE
-            }
-            alpha = 0.85f
-        }
+        val topBadge = createStatusBadgePill(strings, stealthHidden)
         root.addView(
             topBadge,
             FrameLayout.LayoutParams(
@@ -322,51 +364,11 @@ class OverlayWindowController(
                 FrameLayout.LayoutParams.WRAP_CONTENT
             ).apply {
                 gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                topMargin = dp(38)
+                topMargin = dp(28)
             }
         )
 
-        // 4. Bottom Unlock HUD
-        val hudContainer = LinearLayout(overlayContext).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(20), dp(16), dp(20), dp(16))
-            background = GradientDrawable().apply {
-                setColor(0xEB0F172A.toInt())
-                cornerRadius = dp(24).toFloat()
-                setStroke(dp(1), applyAlpha(currentSettings.borderColor.colorArgb, 0x99))
-            }
-            elevation = dp(12).toFloat()
-            alpha = 1f
-        }
-
-        val titleView = TextView(overlayContext).apply {
-            text = strings.overlayTouchBlockedTitle
-            setTextColor(0xFFF8FAFC.toInt())
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-        }
-
-        val hintView = TextView(overlayContext).apply {
-            text = strings.overlayUnlockHint(currentSettings.unlockMethod, currentSettings.holdDurationMs)
-            setTextColor(0xFFCBD5E1.toInt())
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            gravity = Gravity.CENTER
-            setPadding(0, dp(4), 0, dp(12))
-        }
-
-        hudContainer.addView(titleView)
-        hudContainer.addView(hintView)
-
-        val unlockWidget = when (currentSettings.unlockMethod) {
-            UnlockMethod.LONG_PRESS -> createHoldUnlockView()
-            UnlockMethod.SLIDE -> createSlideUnlockView()
-            UnlockMethod.DOUBLE_TAP -> createDoubleTapUnlockView()
-            UnlockMethod.PIN -> createPinUnlockView(hintView)
-        }
-        hudContainer.addView(unlockWidget)
-
+        val hudContainer = buildUnlockHudContainer(strings)
         val isLandscape = overlayContext.resources.configuration.orientation ==
             Configuration.ORIENTATION_LANDSCAPE
         val hudLp = FrameLayout.LayoutParams(
@@ -374,14 +376,14 @@ class OverlayWindowController(
             FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            bottomMargin = if (isLandscape) dp(16) else dp(48)
+            bottomMargin = if (isLandscape) dp(12) else dp(24)
         }
         root.addView(hudContainer, hudLp)
 
         root.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_DOWN) {
                 onTouchBlocked()
-                if (currentSettings.borderEnabled && !currentSettings.borderPulseEnabled) {
+                if (currentSettings.borderEnabled && !currentSettings.borderPulseEnabled && !isStealthHidden()) {
                     borderView.animate().cancel()
                     borderView.alpha = 0.95f
                     borderView.animate().alpha(0.55f).setDuration(600L).start()
@@ -411,19 +413,325 @@ class OverlayWindowController(
         }
     }
 
-    fun hideTouchLockOverlay() {
-        hideHudRunnable?.let { handler.removeCallbacks(it) }
-        hideHudRunnable = null
-        stopBorderPulse()
-        stopOledClockTicker()
-        lockOverlayView?.let { view ->
+    @SuppressLint("ClickableViewAccessibility")
+    private fun showPartialZoneOverlay() {
+        val strings = getAppStrings(currentSettings.appLanguage)
+        val metrics = overlayContext.resources.displayMetrics
+        val screenW = metrics.widthPixels
+        val screenH = metrics.heightPixels
+        val layout = PartialZoneGeometry.computeFourStripLayout(
+            screenWidthPx = screenW,
+            screenHeightPx = screenH,
+            preset = currentSettings.partialZonePreset,
+            customRect = currentSettings.partialZoneRect
+        )
+
+        val strips = listOfNotNull(
+            layout.topStrip,
+            layout.bottomStrip,
+            layout.leftStrip,
+            layout.rightStrip
+        )
+        val bgColor = overlayBackgroundColor()
+
+        strips.forEach { strip ->
+            val stripView = View(overlayContext).apply {
+                setBackgroundColor(bgColor)
+                isClickable = true
+                isFocusable = false
+                setOnTouchListener { _, event ->
+                    if (event.action == MotionEvent.ACTION_DOWN) {
+                        onTouchBlocked()
+                        revealHudTemporarily()
+                    }
+                    true
+                }
+            }
+            val lp = WindowManager.LayoutParams(
+                strip.width,
+                strip.height,
+                overlayWindowType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = strip.left
+                y = strip.top
+                dimAmount = 0f
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    layoutInDisplayCutoutMode =
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+            }
             try {
-                windowManager.removeView(view)
+                windowManager.addView(stripView, lp)
+                partialStripViews.add(stripView)
             } catch (_: Exception) {
             }
         }
+
+        // Non-touchable frame outline around the pass-through cutout
+        val cutoutOutline = BorderOverlayView(overlayContext).apply {
+            configure(
+                color = applyAlpha(currentSettings.borderColor.colorArgb, 0xD8),
+                strokeWidthPx = TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP,
+                    currentSettings.borderThickness.dpValue,
+                    overlayContext.resources.displayMetrics
+                ),
+                cornerRadiusPx = dp(14).toFloat(),
+                style = currentSettings.borderStyle
+            )
+            visibility = if (currentSettings.borderEnabled && !isStealthHidden()) View.VISIBLE else View.GONE
+            alpha = 0.90f
+        }
+        val outlineLp = WindowManager.LayoutParams(
+            layout.cutout.width,
+            layout.cutout.height,
+            overlayWindowType(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = layout.cutout.left
+            y = layout.cutout.top
+            dimAmount = 0f
+        }
+        try {
+            windowManager.addView(cutoutOutline, outlineLp)
+            partialCutoutOutlineView = cutoutOutline
+            borderFrameView = cutoutOutline
+        } catch (_: Exception) {
+            partialCutoutOutlineView = null
+        }
+
+        // Floating HUD wrapper anchored cleanly outside the cutout
+        val spaceAbove = layout.cutout.top
+        val spaceBelow = screenH - (layout.cutout.top + layout.cutout.height)
+        val anchorTop = spaceAbove > spaceBelow
+
+        val hudRoot = FrameLayout(overlayContext)
+        val hudContainer = buildUnlockHudContainer(strings)
+        val badgePill = createStatusBadgePill(strings, stealthHidden = false).apply {
+            visibility = View.VISIBLE
+            setOnClickListener {
+                triggerHaptic(light = true)
+                revealHudTemporarily()
+            }
+        }
+
+        val wrapperStack = LinearLayout(overlayContext).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            addView(badgePill)
+            addView(
+                View(overlayContext).apply {
+                    layoutParams = LinearLayout.LayoutParams(dp(1), dp(6))
+                }
+            )
+            addView(hudContainer)
+        }
+        hudRoot.addView(
+            wrapperStack,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        var hudFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+        if (currentSettings.keepScreenOnEnabled) {
+            hudFlags = hudFlags or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        }
+
+        val hudParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayWindowType(),
+            hudFlags,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = (if (anchorTop) Gravity.TOP else Gravity.BOTTOM) or Gravity.CENTER_HORIZONTAL
+            y = dp(24)
+            dimAmount = 0f
+            screenBrightness = resolveOverlayBrightness()
+        }
+
+        try {
+            windowManager.addView(hudRoot, hudParams)
+            partialHudOverlayView = hudRoot
+            unlockHudContainer = hudContainer
+            statusBadgePill = badgePill
+            startOrStopBorderPulse()
+            scheduleHudHide(currentSettings.hudTimeoutMs)
+        } catch (_: Exception) {
+            partialHudOverlayView = null
+        }
+    }
+
+    private fun createStatusBadgePill(
+        strings: com.example.ui.AppStrings,
+        stealthHidden: Boolean
+    ): TextView {
+        val badgeLabel = when {
+            kidsTimeUpLocked -> "🔒 ${strings.overlayKidsTimeUpTitle}"
+            lowBatteryBlackoutActive -> "🔋 ${strings.overlayLowBatteryBlackoutBadge}"
+            isPartialZoneRenderActive() -> "✂ ${strings.overlayPartialZoneBadge}"
+            else -> "🔒 ${strings.overlayTouchBlockedTitle}"
+        }
+        return TextView(overlayContext).apply {
+            text = badgeLabel
+            setTextColor(0xFFFFFFFF.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(9), dp(4), dp(9), dp(4))
+            background = GradientDrawable().apply {
+                setColor(0xB80F172A.toInt())
+                cornerRadius = dp(50).toFloat()
+                setStroke(dp(1), applyAlpha(currentSettings.borderColor.colorArgb, 0x80))
+            }
+            visibility = if (stealthHidden) {
+                View.GONE
+            } else {
+                when (currentSettings.badgeVisibilityMode) {
+                    BadgeVisibilityMode.ALWAYS -> View.VISIBLE
+                    BadgeVisibilityMode.ON_TOUCH -> View.VISIBLE
+                    BadgeVisibilityMode.HIDDEN -> View.GONE
+                }
+            }
+            alpha = 0.88f
+        }
+    }
+
+    private fun buildUnlockHudContainer(strings: com.example.ui.AppStrings): LinearLayout {
+        val accent = currentSettings.borderColor.colorArgb
+        val method = effectiveUnlockMethod()
+
+        val hudContainer = LinearLayout(overlayContext).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(12), dp(9), dp(12), dp(9))
+            background = GradientDrawable().apply {
+                setColor(0xEB0F172A.toInt())
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), applyAlpha(accent, 0x99))
+            }
+            elevation = dp(12).toFloat()
+            alpha = 1f
+        }
+
+        val titleView = TextView(overlayContext).apply {
+            text = if (kidsTimeUpLocked) strings.overlayKidsTimeUpTitle else strings.overlayTouchBlockedTitle
+            setTextColor(0xFFF8FAFC.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+        }
+
+        val hintView = TextView(overlayContext).apply {
+            text = strings.overlayUnlockHint(method, currentSettings.holdDurationMs)
+            setTextColor(0xFFCBD5E1.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(2), 0, dp(6))
+        }
+
+        hudContainer.addView(titleView)
+        hudContainer.addView(hintView)
+
+        val unlockWidget = when (method) {
+            UnlockMethod.LONG_PRESS -> createHoldUnlockView()
+            UnlockMethod.SLIDE -> createSlideUnlockView()
+            UnlockMethod.DOUBLE_TAP -> createDoubleTapUnlockView()
+            UnlockMethod.PIN -> createPinUnlockView(hintView)
+        }
+        hudContainer.addView(unlockWidget)
+
+        if (shouldShowQuickPeekButton()) {
+            val peekBtn = TextView(overlayContext).apply {
+                text = "👁 ${strings.overlayBtnQuickPeek}"
+                setTextColor(accent)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dp(10), dp(4), dp(10), dp(4))
+                background = GradientDrawable().apply {
+                    setColor(0xFF172030.toInt())
+                    cornerRadius = dp(50).toFloat()
+                    setStroke(dp(1), applyAlpha(accent, 0x80))
+                }
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dp(7)
+                }
+                layoutParams = lp
+                setOnClickListener {
+                    triggerHaptic(light = true)
+                    triggerQuickPeek()
+                }
+            }
+            hudContainer.addView(peekBtn)
+        }
+
+        return hudContainer
+    }
+
+    private fun triggerQuickPeek() {
+        quickPeekRunnable?.let { handler.removeCallbacks(it) }
+        isQuickPeeking = true
+        refreshTouchLockOverlayAppearance()
+        revealHudTemporarily(3200L)
+        val runnable = Runnable {
+            isQuickPeeking = false
+            quickPeekRunnable = null
+            refreshTouchLockOverlayAppearance()
+        }
+        quickPeekRunnable = runnable
+        handler.postDelayed(runnable, 3000L)
+    }
+
+    fun hideTouchLockOverlay() {
+        hideHudRunnable?.let { handler.removeCallbacks(it) }
+        hideHudRunnable = null
+        quickPeekRunnable?.let { handler.removeCallbacks(it) }
+        quickPeekRunnable = null
+        pinCooldownRunnable?.let { handler.removeCallbacks(it) }
+        pinCooldownRunnable = null
+        isQuickPeeking = false
+        activeOverlaySignature = null
+
+        stopBorderPulse()
+        stopOledClockTicker()
+
+        lockOverlayView?.let { view ->
+            runCatching { windowManager.removeView(view) }
+        }
         lockOverlayView = null
         lockOverlayParams = null
+
+        partialStripViews.forEach { strip ->
+            runCatching { windowManager.removeView(strip) }
+        }
+        partialStripViews.clear()
+
+        partialCutoutOutlineView?.let { outline ->
+            runCatching { windowManager.removeView(outline) }
+        }
+        partialCutoutOutlineView = null
+
+        partialHudOverlayView?.let { hud ->
+            runCatching { windowManager.removeView(hud) }
+        }
+        partialHudOverlayView = null
+
         unlockHudContainer = null
         statusBadgePill = null
         borderFrameView = null
@@ -693,10 +1001,12 @@ class OverlayWindowController(
     }
 
     private fun refreshTouchLockOverlayAppearance() {
-        val view = lockOverlayView ?: return
-        val params = lockOverlayParams ?: return
+        val bgColor = overlayBackgroundColor()
+        val stealthHidden = isStealthHidden()
 
-        view.setBackgroundColor(overlayBackgroundColor())
+        partialStripViews.forEach { strip ->
+            strip.setBackgroundColor(bgColor)
+        }
 
         borderFrameView?.let { border ->
             border.configure(
@@ -706,41 +1016,64 @@ class OverlayWindowController(
                     currentSettings.borderThickness.dpValue,
                     overlayContext.resources.displayMetrics
                 ),
-                cornerRadiusPx = dp(18).toFloat(),
+                cornerRadiusPx = dp(if (isPartialZoneRenderActive()) 14 else 18).toFloat(),
                 style = currentSettings.borderStyle
             )
-            border.visibility = if (currentSettings.borderEnabled) View.VISIBLE else View.GONE
+            border.visibility = if (currentSettings.borderEnabled && !stealthHidden) View.VISIBLE else View.GONE
             startOrStopBorderPulse()
         }
 
-        oledClockContainer?.visibility = if (currentSettings.oledClockEnabled) View.VISIBLE else View.GONE
+        oledClockContainer?.visibility =
+            if (currentSettings.oledClockEnabled && !stealthHidden && !isPartialZoneRenderActive()) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
         oledBatteryText?.setTextColor(currentSettings.borderColor.colorArgb)
         startOrStopOledClockTicker()
 
-        statusBadgePill?.visibility = when (currentSettings.badgeVisibilityMode) {
-            BadgeVisibilityMode.ALWAYS -> View.VISIBLE
-            BadgeVisibilityMode.ON_TOUCH -> {
-                if (unlockHudContainer?.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+        val strings = getAppStrings(currentSettings.appLanguage)
+        statusBadgePill?.let { badge ->
+            badge.text = when {
+                kidsTimeUpLocked -> "🔒 ${strings.overlayKidsTimeUpTitle}"
+                lowBatteryBlackoutActive -> "🔋 ${strings.overlayLowBatteryBlackoutBadge}"
+                isPartialZoneRenderActive() -> "✂ ${strings.overlayPartialZoneBadge}"
+                else -> "🔒 ${strings.overlayTouchBlockedTitle}"
             }
-            BadgeVisibilityMode.HIDDEN -> View.GONE
+            badge.visibility = if (stealthHidden) {
+                View.GONE
+            } else if (isPartialZoneRenderActive()) {
+                View.VISIBLE
+            } else {
+                when (currentSettings.badgeVisibilityMode) {
+                    BadgeVisibilityMode.ALWAYS -> View.VISIBLE
+                    BadgeVisibilityMode.ON_TOUCH -> {
+                        if (unlockHudContainer?.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+                    }
+                    BadgeVisibilityMode.HIDDEN -> View.GONE
+                }
+            }
         }
 
-        if (currentSettings.keepScreenOnEnabled) {
-            params.flags = params.flags or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-        } else {
-            params.flags = params.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON.inv()
-        }
-        params.flags = params.flags and WindowManager.LayoutParams.FLAG_DIM_BEHIND.inv()
-        params.dimAmount = 0f
-        params.screenBrightness = resolveOverlayBrightness()
-
-        try {
-            windowManager.updateViewLayout(view, params)
-        } catch (_: Exception) {
+        val view = lockOverlayView
+        val params = lockOverlayParams
+        if (view != null && params != null) {
+            view.setBackgroundColor(bgColor)
+            if (currentSettings.keepScreenOnEnabled) {
+                params.flags = params.flags or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            } else {
+                params.flags = params.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON.inv()
+            }
+            params.flags = params.flags and WindowManager.LayoutParams.FLAG_DIM_BEHIND.inv()
+            params.dimAmount = 0f
+            params.screenBrightness = resolveOverlayBrightness()
+            runCatching { windowManager.updateViewLayout(view, params) }
         }
     }
 
     private fun resolveOverlayBrightness(): Float {
+        if (isQuickPeeking) return WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        if (lowBatteryBlackoutActive) return 0.01f
         val percent = currentSettings.lockBrightnessPercent
         return if (percent < 0) {
             WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
@@ -749,10 +1082,13 @@ class OverlayWindowController(
         }
     }
 
+    private fun isStealthHidden(): Boolean =
+        currentSettings.stealthBlackoutEnabled && !isQuickPeeking && !lowBatteryBlackoutActive
+
     private fun startOrStopBorderPulse() {
         stopBorderPulse()
         val border = borderFrameView ?: return
-        if (!currentSettings.borderEnabled) return
+        if (!currentSettings.borderEnabled || isStealthHidden()) return
         if (!currentSettings.borderPulseEnabled) {
             border.alpha = 0.72f
             return
@@ -775,7 +1111,7 @@ class OverlayWindowController(
 
     private fun startOrStopOledClockTicker() {
         stopOledClockTicker()
-        if (!currentSettings.oledClockEnabled) return
+        if (!currentSettings.oledClockEnabled || isStealthHidden() || isPartialZoneRenderActive()) return
         val runnable = object : Runnable {
             override fun run() {
                 updateOledClockNow()
@@ -1062,6 +1398,30 @@ class OverlayWindowController(
         val accent = currentSettings.borderColor.colorArgb
         val entered = StringBuilder()
 
+        fun startCooldownTicker() {
+            pinCooldownRunnable?.let { handler.removeCallbacks(it) }
+            val ticker = object : Runnable {
+                override fun run() {
+                    val rem = cooldownTracker.remainingCooldownSeconds()
+                    if (rem > 0) {
+                        hintView.text = strings.overlayPinCooldownWait(rem)
+                        hintView.setTextColor(0xFFFB7185.toInt())
+                        handler.postDelayed(this, 1000L)
+                    } else {
+                        hintView.text = strings.overlayPinHint
+                        hintView.setTextColor(0xFFCBD5E1.toInt())
+                        pinCooldownRunnable = null
+                    }
+                }
+            }
+            pinCooldownRunnable = ticker
+            ticker.run()
+        }
+
+        if (cooldownTracker.isCoolingDown()) {
+            startCooldownTicker()
+        }
+
         val wrapper = LinearLayout(overlayContext).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
@@ -1124,6 +1484,11 @@ class OverlayWindowController(
                 }
                 setOnClickListener {
                     revealHudTemporarily(maxOf(currentSettings.hudTimeoutMs, 5000L))
+                    if (cooldownTracker.isCoolingDown()) {
+                        triggerHaptic(light = false)
+                        startCooldownTicker()
+                        return@setOnClickListener
+                    }
                     triggerHaptic(light = true)
                     when (key) {
                         "C" -> {
@@ -1146,14 +1511,26 @@ class OverlayWindowController(
                                 refreshDots()
                                 if (entered.length == 4) {
                                     if (entered.toString() == currentSettings.unlockPin) {
+                                        cooldownTracker.reset()
+                                        pinCooldownRunnable?.let { handler.removeCallbacks(it) }
+                                        pinCooldownRunnable = null
                                         triggerHaptic(light = false)
                                         onUnlockTriggered()
                                     } else {
                                         triggerHaptic(light = false)
-                                        hintView.text = strings.overlayPinWrong
-                                        hintView.setTextColor(0xFFFB7185.toInt())
                                         entered.clear()
                                         refreshDots()
+                                        val cooldownSec = if (currentSettings.wrongAttemptCooldownEnabled || kidsTimeUpLocked) {
+                                            cooldownTracker.recordWrongAttempt()
+                                        } else {
+                                            0
+                                        }
+                                        if (cooldownSec > 0) {
+                                            startCooldownTicker()
+                                        } else {
+                                            hintView.text = strings.overlayPinWrong
+                                            hintView.setTextColor(0xFFFB7185.toInt())
+                                        }
                                     }
                                 }
                             }
@@ -1165,11 +1542,15 @@ class OverlayWindowController(
         }
         wrapper.addView(grid)
 
-        if (currentSettings.biometricUnlockEnabled || currentSettings.emergencyHoldBypassEnabled) {
+        val showEmergencyBypass = currentSettings.emergencyHoldBypassEnabled &&
+            !currentSettings.kidsSafetyEnabled &&
+            !kidsTimeUpLocked
+
+        if (currentSettings.biometricUnlockEnabled || showEmergencyBypass) {
             val recoveryRow = LinearLayout(overlayContext).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
-                setPadding(0, dp(8), 0, 0)
+                setPadding(0, dp(6), 0, 0)
             }
 
             if (currentSettings.biometricUnlockEnabled) {
@@ -1178,7 +1559,7 @@ class OverlayWindowController(
                     setTextColor(accent)
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
                     typeface = Typeface.DEFAULT_BOLD
-                    setPadding(dp(12), dp(7), dp(12), dp(7))
+                    setPadding(dp(9), dp(4), dp(9), dp(4))
                     background = GradientDrawable().apply {
                         setColor(0xFF172030.toInt())
                         cornerRadius = dp(50).toFloat()
@@ -1192,11 +1573,11 @@ class OverlayWindowController(
                 recoveryRow.addView(bioBtn)
             }
 
-            if (currentSettings.emergencyHoldBypassEnabled) {
+            if (showEmergencyBypass) {
                 if (currentSettings.biometricUnlockEnabled) {
                     recoveryRow.addView(
                         View(overlayContext).apply {
-                            layoutParams = LinearLayout.LayoutParams(dp(8), dp(1))
+                            layoutParams = LinearLayout.LayoutParams(dp(6), dp(1))
                         }
                     )
                 }
@@ -1205,7 +1586,7 @@ class OverlayWindowController(
                     setTextColor(0xFFFBBF24.toInt())
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
                     typeface = Typeface.DEFAULT_BOLD
-                    setPadding(dp(12), dp(7), dp(12), dp(7))
+                    setPadding(dp(9), dp(4), dp(9), dp(4))
                     background = GradientDrawable().apply {
                         setColor(0xFF2B2110.toInt())
                         cornerRadius = dp(50).toFloat()
@@ -1266,7 +1647,9 @@ class OverlayWindowController(
         hud.visibility = View.VISIBLE
         hud.animate().alpha(1f).setDuration(180).start()
 
-        if (currentSettings.badgeVisibilityMode == BadgeVisibilityMode.ON_TOUCH) {
+        if (!isStealthHidden() && !isPartialZoneRenderActive() &&
+            currentSettings.badgeVisibilityMode == BadgeVisibilityMode.ON_TOUCH
+        ) {
             statusBadgePill?.let { badge ->
                 badge.animate().cancel()
                 badge.visibility = View.VISIBLE
@@ -1291,7 +1674,7 @@ class OverlayWindowController(
                     }
                 }.start()
             }
-            if (currentSettings.badgeVisibilityMode == BadgeVisibilityMode.ON_TOUCH) {
+            if (!isPartialZoneRenderActive() && currentSettings.badgeVisibilityMode == BadgeVisibilityMode.ON_TOUCH) {
                 statusBadgePill?.let { badge ->
                     badge.animate().alpha(0.0f).setDuration(280).withEndAction {
                         if (badge.alpha <= 0.05f) {
@@ -1355,10 +1738,17 @@ class OverlayWindowController(
         }
     }
 
+    private fun effectiveDimPercent(): Int = when {
+        isQuickPeeking -> 12
+        lowBatteryBlackoutActive -> 98
+        currentSettings.privacyVeilEnabled -> 99
+        else -> currentSettings.customDimPercent.coerceIn(0, 95)
+    }
+
     private fun overlayBackgroundColor(): Int {
-        val percent = currentSettings.customDimPercent.coerceIn(0, 95)
+        val percent = effectiveDimPercent()
         if (percent == 0) return Color.TRANSPARENT
-        val alpha = (percent * 255) / 100
+        val alpha = ((percent * 255) / 100).coerceIn(0, 255)
         return Color.argb(alpha, 5, 8, 14)
     }
 

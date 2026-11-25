@@ -16,14 +16,18 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Edit
@@ -78,13 +83,154 @@ import com.example.data.BadgeVisibilityMode
 import com.example.data.BorderStyle
 import com.example.data.BubbleStyle
 import com.example.data.CustomProfile
+import com.example.data.PartialZonePreset
 import com.example.data.ShieldRuntimeState
 import com.example.data.ShieldSettings
 import com.example.data.SmartPreset
 import com.example.data.UnlockMethod
+import com.example.service.PartialZoneGeometry
 import com.example.ui.AppStrings
 import com.example.ui.PermissionStatus
 import kotlinx.coroutines.delay
+
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.VisualTransformation
+
+@Composable
+fun CompactTextInputBox(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    visualTransformation: VisualTransformation = VisualTransformation.None
+) {
+    var focused by remember { mutableStateOf(false) }
+    val borderColor = if (focused) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outlineVariant
+    }
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(38.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(if (focused) 1.5.dp else 1.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (leadingIcon != null) {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (value.isEmpty()) {
+                    Text(
+                        text = placeholder,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    keyboardOptions = keyboardOptions,
+                    visualTransformation = visualTransformation,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focused = it.isFocused }
+                )
+            }
+            if (trailingContent != null) {
+                Spacer(modifier = Modifier.width(4.dp))
+                trailingContent()
+            }
+        }
+    }
+}
+
+@Composable
+fun TightFilterChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .heightIn(min = 30.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onClick() },
+        shape = RoundedCornerShape(8.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.secondaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (selected) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+            } else {
+                MaterialTheme.colorScheme.outlineVariant
+            }
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(13.dp)
+                )
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
 
 @Composable
 fun SettingsSubHeader(
@@ -96,7 +242,7 @@ fun SettingsSubHeader(
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.primary,
-        modifier = modifier.padding(top = 10.dp, bottom = 4.dp)
+        modifier = modifier.padding(top = 4.dp, bottom = 1.dp)
     )
 }
 
@@ -108,7 +254,13 @@ fun LiveMiniPreviewCard(
     modifier: Modifier = Modifier
 ) {
     val borderColor = Color(settings.borderColor.colorArgb)
-    val dimAlpha = (settings.customDimPercent.coerceIn(0, 95) / 100f)
+    val effectiveDimPct = if (settings.privacyVeilEnabled) 99 else settings.customDimPercent.coerceIn(0, 95)
+    val dimAlpha = effectiveDimPct / 100f
+    val stealthHidden = settings.stealthBlackoutEnabled
+    val isPartialCutout = settings.partialZoneEnabled && settings.partialZonePreset != PartialZonePreset.FULL_LOCK
+    val cutoutNorm = remember(settings.partialZonePreset, settings.partialZoneRect) {
+        PartialZoneGeometry.resolveNormalizedRect(settings.partialZonePreset, settings.partialZoneRect)
+    }
 
     val infiniteTransition = rememberInfiniteTransition(label = "previewBorderPulse")
     val pulseAlpha by infiniteTransition.animateFloat(
@@ -128,7 +280,7 @@ fun LiveMiniPreviewCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -144,20 +296,20 @@ fun LiveMiniPreviewCard(
                     FilledTonalButton(
                         onClick = onTestGesture,
                         modifier = Modifier
-                            .height(34.dp)
+                            .height(28.dp)
                             .testTag("preview_test_gesture_button"),
                         shape = RoundedCornerShape(50),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            horizontal = 12.dp,
+                        contentPadding = PaddingValues(
+                            horizontal = 8.dp,
                             vertical = 0.dp
                         )
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.PlayArrow,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(13.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
                         Text(
                             text = strings.btnTestGestureHere,
                             style = MaterialTheme.typography.labelSmall
@@ -165,13 +317,13 @@ fun LiveMiniPreviewCard(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(152.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .height(104.dp)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(
                         Brush.linearGradient(
                             listOf(
@@ -182,11 +334,14 @@ fun LiveMiniPreviewCard(
                         )
                     )
             ) {
+                val previewW = maxWidth
+                val previewH = maxHeight
+
                 Column(
                     modifier = Modifier.align(Alignment.Center),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    if (settings.oledClockEnabled) {
+                    if (settings.oledClockEnabled && !stealthHidden && !isPartialCutout) {
                         Text(
                             text = "12:45",
                             style = MaterialTheme.typography.headlineMedium,
@@ -194,7 +349,7 @@ fun LiveMiniPreviewCard(
                             color = if (dimAlpha > 0.45f) Color.White.copy(alpha = 0.78f) else Color(0xFF0F172A)
                         )
                         Text(
-                            text = "🔋 85% • ${100 - settings.customDimPercent}% ${strings.clearPercentLabel}",
+                            text = "🔋 85% • ${100 - effectiveDimPct}% ${strings.clearPercentLabel}",
                             style = MaterialTheme.typography.labelSmall,
                             color = if (dimAlpha > 0.45f) Color.White.copy(alpha = 0.65f) else Color(0xFF0F172A).copy(alpha = 0.78f)
                         )
@@ -207,7 +362,7 @@ fun LiveMiniPreviewCard(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "${100 - settings.customDimPercent}% ${strings.clearPercentLabel}",
+                            text = "${100 - effectiveDimPct}% ${strings.clearPercentLabel}",
                             style = MaterialTheme.typography.labelMedium,
                             color = Color(0xFF0F172A).copy(alpha = 0.8f)
                         )
@@ -223,8 +378,36 @@ fun LiveMiniPreviewCard(
                     )
                 }
 
+                // Live Partial Zone Cutout Box
+                if (isPartialCutout) {
+                    val cw = (previewW * (cutoutNorm.right - cutoutNorm.left)).coerceAtLeast(24.dp)
+                    val ch = (previewH * (cutoutNorm.bottom - cutoutNorm.top)).coerceAtLeast(18.dp)
+                    Box(
+                        modifier = Modifier
+                            .offset(x = previewW * cutoutNorm.left, y = previewH * cutoutNorm.top)
+                            .width(cw)
+                            .height(ch)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(borderColor.copy(alpha = 0.22f))
+                            .border(1.5.dp, borderColor, RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = strings.overlayPartialZoneBadge,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Color(0xB00F172A))
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+
                 // Live Edge Border (Full Glow or Corner Frame)
-                if (settings.borderEnabled) {
+                if (settings.borderEnabled && !stealthHidden) {
                     if (settings.borderStyle == BorderStyle.FULL_GLOW) {
                         Box(
                             modifier = Modifier
@@ -243,16 +426,12 @@ fun LiveMiniPreviewCard(
                             val col = borderColor.copy(alpha = effectiveBorderAlpha)
                             val w = size.width
                             val h = size.height
-                            // Top-Left
                             drawLine(col, Offset(pad, pad), Offset(pad + arm, pad), strokePx, StrokeCap.Round)
                             drawLine(col, Offset(pad, pad), Offset(pad, pad + arm), strokePx, StrokeCap.Round)
-                            // Top-Right
                             drawLine(col, Offset(w - pad - arm, pad), Offset(w - pad, pad), strokePx, StrokeCap.Round)
                             drawLine(col, Offset(w - pad, pad), Offset(w - pad, pad + arm), strokePx, StrokeCap.Round)
-                            // Bottom-Left
                             drawLine(col, Offset(pad, h - pad - arm), Offset(pad, h - pad), strokePx, StrokeCap.Round)
                             drawLine(col, Offset(pad, h - pad), Offset(pad + arm, h - pad), strokePx, StrokeCap.Round)
-                            // Bottom-Right
                             drawLine(col, Offset(w - pad - arm, h - pad), Offset(w - pad, h - pad), strokePx, StrokeCap.Round)
                             drawLine(col, Offset(w - pad, h - pad - arm), Offset(w - pad, h - pad), strokePx, StrokeCap.Round)
                         }
@@ -260,11 +439,11 @@ fun LiveMiniPreviewCard(
                 }
 
                 // Live Top Status Badge
-                if (settings.badgeVisibilityMode != BadgeVisibilityMode.HIDDEN) {
+                if (settings.badgeVisibilityMode != BadgeVisibilityMode.HIDDEN && !stealthHidden) {
                     Surface(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = 10.dp),
+                            .padding(top = 7.dp),
                         shape = RoundedCornerShape(50),
                         color = Color(0xCC0F172A),
                         border = BorderStroke(1.dp, borderColor.copy(alpha = 0.75f))
@@ -277,7 +456,7 @@ fun LiveMiniPreviewCard(
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                         )
                     }
                 }
@@ -286,7 +465,7 @@ fun LiveMiniPreviewCard(
                     Surface(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(10.dp),
+                            .padding(7.dp),
                         shape = RoundedCornerShape(50),
                         color = Color(0xB80F172A)
                     ) {
@@ -294,7 +473,7 @@ fun LiveMiniPreviewCard(
                             text = "☀ ${settings.lockBrightnessPercent}%",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
@@ -305,7 +484,7 @@ fun LiveMiniPreviewCard(
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
-                            .padding(end = 10.dp)
+                            .padding(end = 8.dp)
                             .alpha(settings.floatingBubbleOpacity)
                     ) {
                         when (settings.bubbleStyle) {
@@ -333,7 +512,7 @@ fun LiveMiniPreviewCard(
                                 shadowElevation = 4.dp
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
@@ -395,7 +574,7 @@ fun SmartPresetsRow(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -410,20 +589,20 @@ fun SmartPresetsRow(
                     OutlinedButton(
                         onClick = onSaveCurrentProfile,
                         modifier = Modifier
-                            .height(34.dp)
+                            .height(28.dp)
                             .testTag("save_custom_profile_button"),
                         shape = RoundedCornerShape(50),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            horizontal = 10.dp,
+                        contentPadding = PaddingValues(
+                            horizontal = 8.dp,
                             vertical = 0.dp
                         )
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Add,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(13.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
                         Text(
                             text = strings.btnSaveProfile,
                             style = MaterialTheme.typography.labelSmall
@@ -431,13 +610,13 @@ fun SmartPresetsRow(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 rows.forEach { pair ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         pair.forEach { preset ->
                             val isMatched = when (preset) {
@@ -493,9 +672,9 @@ fun SmartPresetsRow(
                                 )
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                                 ) {
                                     Icon(
                                         imageVector = icon,
@@ -505,7 +684,7 @@ fun SmartPresetsRow(
                                         } else {
                                             MaterialTheme.colorScheme.onSurfaceVariant
                                         },
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier.size(17.dp)
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
@@ -536,15 +715,15 @@ fun SmartPresetsRow(
             }
 
             if (onApplyCustomProfile != null) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = strings.customProfilesTitle,
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 if (settings.customProfiles.isEmpty()) {
                     Text(
                         text = strings.noCustomProfilesHint,
@@ -553,8 +732,8 @@ fun SmartPresetsRow(
                     )
                 } else {
                     FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         settings.customProfiles.forEach { profile ->
                             Surface(
@@ -567,7 +746,7 @@ fun SmartPresetsRow(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
                                         .clickable { onApplyCustomProfile(profile) }
-                                        .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
+                                        .padding(start = 8.dp, end = 2.dp, top = 2.dp, bottom = 2.dp)
                                 ) {
                                     Text(
                                         text = profile.name,
@@ -577,26 +756,26 @@ fun SmartPresetsRow(
                                     if (onRenameCustomProfile != null) {
                                         IconButton(
                                             onClick = { onRenameCustomProfile(profile) },
-                                            modifier = Modifier.size(28.dp)
+                                            modifier = Modifier.size(24.dp)
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Rounded.Edit,
                                                 contentDescription = strings.renameProfileDialogTitle,
                                                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                modifier = Modifier.size(14.dp)
+                                                modifier = Modifier.size(13.dp)
                                             )
                                         }
                                     }
                                     if (onDeleteCustomProfile != null) {
                                         IconButton(
                                             onClick = { onDeleteCustomProfile(profile) },
-                                            modifier = Modifier.size(28.dp)
+                                            modifier = Modifier.size(24.dp)
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Rounded.Close,
                                                 contentDescription = strings.btnCancel,
                                                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                modifier = Modifier.size(14.dp)
+                                                modifier = Modifier.size(13.dp)
                                             )
                                         }
                                     }
@@ -636,7 +815,7 @@ fun InlineGestureTesterBox(
         border = BorderStroke(1.dp, accentColor.copy(alpha = 0.45f))
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -644,7 +823,7 @@ fun InlineGestureTesterBox(
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = if (unlockedBanner) {
                     "✓ ${strings.inlineTesterSuccess}"
@@ -658,7 +837,7 @@ fun InlineGestureTesterBox(
                     MaterialTheme.colorScheme.onSurfaceVariant
                 }
             )
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             when (settings.unlockMethod) {
                 UnlockMethod.LONG_PRESS -> SandboxHoldUnlockButton(
@@ -683,6 +862,8 @@ fun InlineGestureTesterBox(
                     strings = strings,
                     biometricEnabled = settings.biometricUnlockEnabled,
                     emergencyBypassEnabled = settings.emergencyHoldBypassEnabled,
+                    kidsSafetyEnabled = settings.kidsSafetyEnabled,
+                    wrongAttemptCooldownEnabled = settings.wrongAttemptCooldownEnabled,
                     onWrongPin = {},
                     onUnlocked = { unlockedBanner = true }
                 )
@@ -705,16 +886,16 @@ fun PrivacyTrustCard(
         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(8.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Icon(
                     imageVector = Icons.Rounded.VerifiedUser,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(16.dp)
                 )
                 Text(
                     text = "${strings.privacyCardTitle} • v${BuildConfig.VERSION_NAME}",
@@ -722,10 +903,10 @@ fun PrivacyTrustCard(
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(5.dp))
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 listOf(
                     strings.privacyBadgeOffline,
@@ -740,12 +921,12 @@ fun PrivacyTrustCard(
                             text = "✓ $badge",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = strings.privacyCardDesc,
                 style = MaterialTheme.typography.bodySmall,
@@ -776,12 +957,12 @@ fun CollapsibleSettingsCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onToggleExpand() }
-                    .padding(16.dp)
+                    .padding(horizontal = 10.dp, vertical = 7.dp)
                     .testTag(testTag),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    modifier = Modifier.size(38.dp),
+                    modifier = Modifier.size(28.dp),
                     shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.primaryContainer
                 ) {
@@ -790,11 +971,11 @@ fun CollapsibleSettingsCard(
                             imageVector = icon,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
@@ -812,7 +993,8 @@ fun CollapsibleSettingsCard(
                 Icon(
                     imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
                 )
             }
 
@@ -821,9 +1003,9 @@ fun CollapsibleSettingsCard(
                 enter = expandVertically(),
                 exit = shrinkVertically()
             ) {
-                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                Column(modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 8.dp)) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     content()
                 }
             }
@@ -839,9 +1021,10 @@ fun DiagnosticsCard(
     onRequestOverlay: () -> Unit,
     onRequestNotifications: () -> Unit,
     onRequestPhoneState: () -> Unit,
-    onOpenBatterySettings: () -> Unit
+    onOpenBatterySettings: () -> Unit,
+    onOpenUsageAccess: () -> Unit = {}
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         DiagnosticRow(
             label = strings.diagProximity,
             value = if (runtime.hasProximitySensor) strings.diagAvailable else strings.diagUnavailable,
@@ -871,6 +1054,12 @@ fun DiagnosticsCard(
             onClick = if (!permissions.hasPhoneStatePermission) onRequestPhoneState else null
         )
         DiagnosticRow(
+            label = strings.diagUsageAccess,
+            value = if (permissions.hasUsageAccessPermission) strings.permGranted else strings.permOptional,
+            isHealthy = permissions.hasUsageAccessPermission,
+            onClick = onOpenUsageAccess
+        )
+        DiagnosticRow(
             label = strings.diagBattery,
             value = if (permissions.isIgnoringBatteryOptimizations) strings.diagUnrestricted else strings.diagOptimized,
             isHealthy = permissions.isIgnoringBatteryOptimizations,
@@ -898,29 +1087,29 @@ private fun DiagnosticRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 8.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
                     text = value,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = if (isHealthy) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
                 )
                 Icon(
                     imageVector = if (isHealthy) Icons.Rounded.CheckCircle else Icons.Rounded.WarningAmber,
                     contentDescription = null,
                     tint = if (isHealthy) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(14.dp)
                 )
             }
         }

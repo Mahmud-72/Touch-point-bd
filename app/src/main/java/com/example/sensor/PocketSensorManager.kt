@@ -9,12 +9,14 @@ import android.os.Handler
 import android.os.Looper
 import com.example.data.ShieldStateHolder
 import kotlin.math.abs
+import kotlin.math.sqrt
 
 class PocketSensorManager(
     context: Context,
     private val onPocketLockTriggered: () -> Unit,
     private val onPocketUnlockTriggered: () -> Unit,
-    private val onFlipFaceDownTriggered: () -> Unit = {}
+    private val onFlipFaceDownTriggered: () -> Unit = {},
+    private val onShakeDetected: () -> Unit = {}
 ) : SensorEventListener {
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -29,6 +31,8 @@ class PocketSensorManager(
     private var pauseInLandscape = true
     private var pauseWhileCharging = false
     private var flipFaceDownEnabled = false
+    private var shakeEnabled = false
+    private var shakeThresholdG = 17.5f
     private var nearDebounceMs = 700L
 
     private var isLandscape = false
@@ -40,6 +44,8 @@ class PocketSensorManager(
     private var lastIsNear = false
     private var isFlatFaceUp = false
     private var isFaceDown = false
+    private var lastShakePeakMs = 0L
+    private var lastShakeFireMs = 0L
 
     init {
         val maxRange = proximitySensor?.maximumRange ?: 5f
@@ -58,7 +64,8 @@ class PocketSensorManager(
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
         }
         accelerometerSensor?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+            val rate = if (shakeEnabled) SensorManager.SENSOR_DELAY_UI else SensorManager.SENSOR_DELAY_NORMAL
+            sensorManager.registerListener(this, it, rate)
         }
         isListening = proximitySensor != null || accelerometerSensor != null
     }
@@ -77,8 +84,11 @@ class PocketSensorManager(
         orientationFilter: Boolean,
         pauseLandscape: Boolean = true,
         pauseCharging: Boolean = false,
-        flipFaceDown: Boolean = false
+        flipFaceDown: Boolean = false,
+        shakeDetection: Boolean = false,
+        shakeThreshold: Float = 17.5f
     ) {
+        val wasShake = shakeEnabled
         autoLockEnabled = autoLock
         autoUnlockEnabled = autoUnlock
         nearDebounceMs = debounceMs.coerceIn(400L, 2500L)
@@ -86,6 +96,14 @@ class PocketSensorManager(
         pauseInLandscape = pauseLandscape
         pauseWhileCharging = pauseCharging
         flipFaceDownEnabled = flipFaceDown
+        shakeEnabled = shakeDetection
+        shakeThresholdG = shakeThreshold.coerceIn(12f, 26f)
+
+        if (isListening && wasShake != shakeDetection && accelerometerSensor != null) {
+            sensorManager.unregisterListener(this, accelerometerSensor)
+            val rate = if (shakeEnabled) SensorManager.SENSOR_DELAY_UI else SensorManager.SENSOR_DELAY_NORMAL
+            sensorManager.registerListener(this, accelerometerSensor, rate)
+        }
 
         publishOrientation()
 
@@ -100,6 +118,9 @@ class PocketSensorManager(
         if (!flipFaceDown) {
             pendingFlipRunnable?.let { handler.removeCallbacks(it) }
             pendingFlipRunnable = null
+        }
+        if (!shakeDetection) {
+            lastShakePeakMs = 0L
         }
     }
 
@@ -122,6 +143,23 @@ class PocketSensorManager(
         val x = event.values[0]
         val y = event.values[1]
         val z = event.values[2]
+
+        if (shakeEnabled) {
+            val magnitude = computeAccelerationMagnitude(x, y, z)
+            if (isShakeSpike(magnitude, shakeThresholdG)) {
+                val now = System.currentTimeMillis()
+                if (now - lastShakeFireMs >= SHAKE_COOLDOWN_MS) {
+                    val delta = now - lastShakePeakMs
+                    if (delta in SHAKE_MIN_PEAK_GAP_MS..SHAKE_DOUBLE_WINDOW_MS) {
+                        lastShakePeakMs = 0L
+                        lastShakeFireMs = now
+                        onShakeDetected()
+                    } else if (delta > SHAKE_DOUBLE_WINDOW_MS || lastShakePeakMs == 0L) {
+                        lastShakePeakMs = now
+                    }
+                }
+            }
+        }
 
         val flatUp = z > 8.2f && abs(x) < 2.8f && abs(y) < 2.8f
         val faceDown = z < -8.2f && abs(x) < 2.8f && abs(y) < 2.8f
@@ -219,10 +257,20 @@ class PocketSensorManager(
         pendingNearRunnable = null
         pendingFarRunnable = null
         pendingFlipRunnable = null
+        lastShakePeakMs = 0L
     }
 
     companion object {
         private const val FAR_DEBOUNCE_MS = 600L
         private const val FLIP_DEBOUNCE_MS = 900L
+        private const val SHAKE_MIN_PEAK_GAP_MS = 130L
+        private const val SHAKE_DOUBLE_WINDOW_MS = 900L
+        private const val SHAKE_COOLDOWN_MS = 1600L
+
+        fun computeAccelerationMagnitude(x: Float, y: Float, z: Float): Float =
+            sqrt(x * x + y * y + z * z)
+
+        fun isShakeSpike(magnitude: Float, threshold: Float): Boolean =
+            magnitude >= threshold
     }
 }

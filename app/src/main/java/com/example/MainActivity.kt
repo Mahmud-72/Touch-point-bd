@@ -72,8 +72,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.SettingsSection
 import com.example.ui.MainUiState
 import com.example.ui.MainViewModel
+import com.example.ui.components.AppWatchPickerDialog
 import com.example.ui.components.InAppLockSandboxDialog
 import com.example.ui.components.OnboardingOverlay
+import com.example.ui.components.UsageAccessDisclosureDialog
 import com.example.ui.getAppStrings
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.GuideScreen
@@ -190,6 +192,8 @@ private fun TouchShieldRoot(
     var settingsFocusSection by rememberSaveable { mutableStateOf<SettingsSection?>(null) }
     var settingsFocusTicket by rememberSaveable { mutableIntStateOf(0) }
     var showLanguagePicker by rememberSaveable { mutableStateOf(false) }
+    var showUsageAccessDisclosure by rememberSaveable { mutableStateOf(false) }
+    var showAppWatchPicker by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(viewModel) {
@@ -238,7 +242,7 @@ private fun TouchShieldRoot(
                     actions = {
                         Surface(
                             modifier = Modifier
-                                .padding(end = 12.dp)
+                                .padding(end = 8.dp)
                                 .clip(RoundedCornerShape(50))
                                 .clickable { showLanguagePicker = true }
                                 .testTag("top_language_toggle"),
@@ -247,7 +251,7 @@ private fun TouchShieldRoot(
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
@@ -255,7 +259,7 @@ private fun TouchShieldRoot(
                                     imageVector = Icons.Rounded.Translate,
                                     contentDescription = strings.languageLabel,
                                     tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                                 Text(
                                     text = uiState.settings.appLanguage.resolve().storageKey.uppercase(),
@@ -348,10 +352,20 @@ private fun TouchShieldRoot(
                                 onDeleteCustomProfile = { viewModel.deleteCustomProfile(it.id) },
                                 onRequestOverlayPermission = onRequestOverlayPermission,
                                 onRequestNotificationPermission = onRequestNotificationPermission,
+                                onToggleAdvancedMode = { viewModel.setAdvancedMode(it) },
                                 onTogglePocketAutoLock = { viewModel.setPocketAutoLock(it) },
                                 onTogglePocketAutoUnlock = { viewModel.setPocketAutoUnlock(it) },
                                 onToggleFloatingBubble = { viewModel.setFloatingBubbleEnabled(it) },
                                 onToggleKeepScreenOn = { viewModel.setKeepScreenOn(it) },
+                                onTogglePartialZone = { viewModel.setPartialZoneEnabled(it) },
+                                onTogglePrivacyVeil = { viewModel.setPrivacyVeilEnabled(it) },
+                                onToggleKidsSafety = { viewModel.setKidsSafetyEnabled(it) },
+                                onToggleAppWatch = { enabled ->
+                                    viewModel.setAppWatchEnabled(enabled)
+                                    if (enabled && !uiState.permissions.hasUsageAccessPermission) {
+                                        showUsageAccessDisclosure = true
+                                    }
+                                },
                                 onOpenSettings = { section ->
                                     if (section != null) {
                                         settingsFocusSection = section
@@ -366,6 +380,7 @@ private fun TouchShieldRoot(
                                 runtime = uiState.runtime,
                                 permissions = uiState.permissions,
                                 strings = strings,
+                                onAdvancedModeChanged = { viewModel.setAdvancedMode(it) },
                                 onSelectPreset = { viewModel.applySmartPreset(it) },
                                 onSaveCustomProfile = { viewModel.saveCurrentAsProfile(it) },
                                 onApplyCustomProfile = { viewModel.applyCustomProfile(it.id) },
@@ -380,6 +395,9 @@ private fun TouchShieldRoot(
                                 onEmergencyBypassChanged = { viewModel.setEmergencyHoldBypass(it) },
                                 onCountdownSelected = { viewModel.setLockCountdownSeconds(it) },
                                 onHudTimeoutSelected = { viewModel.setHudTimeoutMs(it) },
+                                onKidsSafetyChanged = { viewModel.setKidsSafetyEnabled(it) },
+                                onWrongAttemptCooldownChanged = { viewModel.setWrongAttemptCooldownEnabled(it) },
+                                onKidsLockOnTimerExpiryChanged = { viewModel.setKidsLockOnTimerExpiry(it) },
                                 onOverlayStyleSelected = { viewModel.setOverlayStyle(it) },
                                 onCustomDimChanged = { viewModel.setCustomDimPercent(it) },
                                 onLockBrightnessSelected = { viewModel.setLockBrightnessPercent(it) },
@@ -390,6 +408,11 @@ private fun TouchShieldRoot(
                                 onBorderPulseChanged = { viewModel.setBorderPulse(it) },
                                 onBadgeModeSelected = { viewModel.setBadgeVisibilityMode(it) },
                                 onOledClockChanged = { viewModel.setOledClockEnabled(it) },
+                                onPartialZoneEnabledChanged = { viewModel.setPartialZoneEnabled(it) },
+                                onPartialZonePresetSelected = { viewModel.setPartialZonePreset(it) },
+                                onPartialZoneRectChanged = { viewModel.setPartialZoneRect(it) },
+                                onPrivacyVeilChanged = { viewModel.setPrivacyVeilEnabled(it) },
+                                onStealthBlackoutChanged = { viewModel.setStealthBlackoutEnabled(it) },
                                 onFloatingBubbleEnabledChanged = { viewModel.setFloatingBubbleEnabled(it) },
                                 onFloatingBubbleOpacityChanged = { viewModel.setFloatingBubbleOpacity(it) },
                                 onBubbleSizeSelected = { viewModel.setBubbleSize(it) },
@@ -406,6 +429,21 @@ private fun TouchShieldRoot(
                                 onAutoUnlockOnCallChanged = { viewModel.setAutoUnlockOnCall(it) },
                                 onReLockAfterCallChanged = { viewModel.setReLockAfterCall(it) },
                                 onSessionTimerSelected = { viewModel.setSessionTimerMinutes(it) },
+                                onAppWatchEnabledChanged = { viewModel.setAppWatchEnabled(it) },
+                                onAppWatchActionSelected = { viewModel.setAppWatchAction(it) },
+                                onAppWatchAutoDisarmChanged = { viewModel.setAppWatchAutoDisarmOnExit(it) },
+                                onOpenWatchedAppsPicker = {
+                                    viewModel.loadSelectableAppsIfNeeded()
+                                    showAppWatchPicker = true
+                                },
+                                onOpenUsageAccessDisclosure = { showUsageAccessDisclosure = true },
+                                onShakeToLockChanged = { viewModel.setShakeToLockEnabled(it) },
+                                onShakeToUnlockChanged = { viewModel.setShakeToUnlockEnabled(it) },
+                                onShakeSensitivitySelected = { viewModel.setShakeSensitivity(it) },
+                                onVolumeDoublePressSelected = { viewModel.setVolumeDoublePressAction(it) },
+                                onLowBatteryBlackoutSelected = { viewModel.setLowBatteryBlackoutPercent(it) },
+                                onAutoLockChargerConnectChanged = { viewModel.setAutoLockOnChargerConnect(it) },
+                                onUnlockChargerDisconnectChanged = { viewModel.setUnlockOnChargerDisconnect(it) },
                                 onHapticsChanged = { viewModel.setHapticFeedback(it) },
                                 onAutoBootChanged = { viewModel.setAutoStartOnBoot(it) },
                                 onThemeModeSelected = { viewModel.setThemeMode(it) },
@@ -456,6 +494,24 @@ private fun TouchShieldRoot(
             strings = strings,
             onBlockedTouch = { viewModel.recordSandboxBlockedTouch() },
             onDismiss = { viewModel.closeSandbox() }
+        )
+    }
+
+    if (showUsageAccessDisclosure) {
+        UsageAccessDisclosureDialog(
+            strings = strings,
+            onConfirmOpenSettings = { viewModel.openUsageAccessSettings() },
+            onDismiss = { showUsageAccessDisclosure = false }
+        )
+    }
+
+    if (showAppWatchPicker) {
+        AppWatchPickerDialog(
+            apps = uiState.installedSelectableApps,
+            selectedPackages = uiState.settings.watchedAppPackages,
+            strings = strings,
+            onTogglePackage = { pkg -> viewModel.toggleWatchedAppPackage(pkg) },
+            onDismiss = { showAppWatchPicker = false }
         )
     }
 }

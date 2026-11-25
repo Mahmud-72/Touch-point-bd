@@ -19,7 +19,10 @@ object ShieldStateHolder {
                     countdownRemainingSec = 0,
                     isBubbleTemporarilyHidden = false,
                     sessionBlockedTouches = 0,
-                    lockStartTimeMs = 0L
+                    lockStartTimeMs = 0L,
+                    activeWatchedApp = null,
+                    isLowBatteryBlackoutActive = false,
+                    isKidsTimeUpLocked = false
                 )
             } else {
                 it.copy(isServiceRunning = true)
@@ -42,7 +45,9 @@ object ShieldStateHolder {
                     isScreenLocked = false,
                     lockSource = LockSource.NONE,
                     countdownRemainingSec = 0,
-                    lockStartTimeMs = 0L
+                    lockStartTimeMs = 0L,
+                    isLowBatteryBlackoutActive = false,
+                    isKidsTimeUpLocked = false
                 )
             }
         }
@@ -54,6 +59,18 @@ object ShieldStateHolder {
 
     fun setBubbleTemporarilyHidden(hidden: Boolean) {
         _runtimeState.update { it.copy(isBubbleTemporarilyHidden = hidden) }
+    }
+
+    fun setActiveWatchedApp(packageName: String?) {
+        _runtimeState.update { it.copy(activeWatchedApp = packageName) }
+    }
+
+    fun setLowBatteryBlackoutActive(active: Boolean) {
+        _runtimeState.update { it.copy(isLowBatteryBlackoutActive = active) }
+    }
+
+    fun setKidsTimeUpLocked(locked: Boolean) {
+        _runtimeState.update { it.copy(isKidsTimeUpLocked = locked) }
     }
 
     fun incrementSessionBlockedTouches() {

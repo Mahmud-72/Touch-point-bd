@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,15 +38,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.ChildCare
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CropFree
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
+import androidx.compose.material.icons.rounded.NightsStay
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Sensors
@@ -64,6 +69,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -71,6 +77,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -102,10 +109,13 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.BadgeVisibilityMode
 import com.example.data.BorderStyle
+import com.example.data.PartialZonePreset
+import com.example.data.SettingHelpTopic
 import com.example.data.SettingsSection
 import com.example.data.ShieldRuntimeState
 import com.example.data.ShieldSettings
 import com.example.data.UnlockMethod
+import com.example.service.PartialZoneGeometry
 import com.example.ui.AppStrings
 import com.example.ui.PermissionStatus
 import kotlinx.coroutines.delay
@@ -183,7 +193,7 @@ fun ShieldHeroCard(
                         radius = 650f
                     )
                 )
-                .padding(18.dp)
+                .padding(10.dp)
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -200,13 +210,13 @@ fun ShieldHeroCard(
                         border = BorderStroke(1.dp, accentColor.copy(alpha = 0.4f))
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(8.dp)
+                                    .size(7.dp)
                                     .clip(CircleShape)
                                     .background(accentColor)
                             )
@@ -228,7 +238,7 @@ fun ShieldHeroCard(
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
@@ -236,7 +246,7 @@ fun ShieldHeroCard(
                                 imageVector = Icons.Rounded.Tune,
                                 contentDescription = strings.btnCustomize,
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(13.dp)
                             )
                             Text(
                                 text = strings.btnCustomize,
@@ -247,11 +257,11 @@ fun ShieldHeroCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(7.dp))
 
                 Box(
                     modifier = Modifier
-                        .size(130.dp)
+                        .size(86.dp)
                         .clip(CircleShape)
                         .clickable { onToggleArmed() }
                         .testTag("shield_orb_button"),
@@ -270,18 +280,18 @@ fun ShieldHeroCard(
                             color = accentColor.copy(alpha = 0.25f),
                             radius = baseRadius * 0.78f,
                             center = center,
-                            style = Stroke(width = 2.dp.toPx())
+                            style = Stroke(width = 1.8.dp.toPx())
                         )
                         drawCircle(
                             color = accentColor.copy(alpha = 0.65f),
                             radius = baseRadius * 0.62f,
                             center = center,
-                            style = Stroke(width = 2.5.dp.toPx())
+                            style = Stroke(width = 2.dp.toPx())
                         )
                     }
 
                     Surface(
-                        modifier = Modifier.size(70.dp),
+                        modifier = Modifier.size(50.dp),
                         shape = CircleShape,
                         color = accentColor.copy(alpha = 0.18f),
                         border = BorderStroke(1.5.dp, accentColor)
@@ -296,28 +306,28 @@ fun ShieldHeroCard(
                                 },
                                 contentDescription = statusTitle,
                                 tint = accentColor,
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
                     text = statusDesc,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 // Active Configuration Strip (Quick Deep-Jumps into Settings)
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     val unlockChipText = when (settings.unlockMethod) {
                         UnlockMethod.LONG_PRESS ->
@@ -363,15 +373,49 @@ fun ShieldHeroCard(
                             testTag = "hero_rule_countdown"
                         )
                     }
+
+                    if (settings.partialZoneEnabled && settings.partialZonePreset != PartialZonePreset.FULL_LOCK) {
+                        HeroRulePill(
+                            icon = Icons.Rounded.CropFree,
+                            text = strings.togglePartialZone,
+                            onClick = { onOpenSettings(SettingsSection.OVERLAY) },
+                            testTag = "hero_rule_partial"
+                        )
+                    }
+                    if (settings.privacyVeilEnabled) {
+                        HeroRulePill(
+                            icon = Icons.Rounded.NightsStay,
+                            text = strings.togglePrivacyVeil,
+                            onClick = { onOpenSettings(SettingsSection.OVERLAY) },
+                            testTag = "hero_rule_privacy"
+                        )
+                    }
+                    if (settings.kidsSafetyEnabled) {
+                        HeroRulePill(
+                            icon = Icons.Rounded.ChildCare,
+                            text = strings.toggleKidsSafety,
+                            onClick = { onOpenSettings(SettingsSection.UNLOCK) },
+                            testTag = "hero_rule_kids"
+                        )
+                    }
+                    if (settings.appWatchEnabled) {
+                        HeroRulePill(
+                            icon = Icons.Rounded.Apps,
+                            text = strings.toggleAppWatch,
+                            onClick = { onOpenSettings(SettingsSection.POCKET) },
+                            testTag = "hero_rule_appwatch"
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(7.dp))
 
                 Button(
                     onClick = onToggleArmed,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp)
+                        .height(40.dp)
                         .testTag("arm_shield_button"),
                     shape = MaterialTheme.shapes.medium,
                     colors = ButtonDefaults.buttonColors(
@@ -390,9 +434,9 @@ fun ShieldHeroCard(
                     Icon(
                         imageVector = if (isServiceRunning) Icons.Rounded.LockOpen else Icons.Rounded.Shield,
                         contentDescription = null,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(17.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(5.dp))
                     Text(
                         text = when {
                             !hasOverlayPermission -> strings.btnGrantPermission
@@ -403,26 +447,27 @@ fun ShieldHeroCard(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     FilledTonalButton(
                         onClick = onLockNow,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp)
+                            .height(38.dp)
                             .testTag("lock_now_button"),
                         shape = MaterialTheme.shapes.medium
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Lock,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(15.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = strings.btnLockScreenNow,
                             maxLines = 1,
@@ -433,9 +478,10 @@ fun ShieldHeroCard(
 
                     OutlinedButton(
                         onClick = onTestSandbox,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp)
+                            .height(38.dp)
                             .testTag("sandbox_test_button"),
                         shape = MaterialTheme.shapes.medium,
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
@@ -443,9 +489,9 @@ fun ShieldHeroCard(
                         Icon(
                             imageVector = Icons.Rounded.TouchApp,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(15.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = strings.btnTestLockSandbox,
                             maxLines = 1,
@@ -476,15 +522,15 @@ private fun HeroRulePill(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(13.dp)
+                modifier = Modifier.size(12.dp)
             )
             Text(
                 text = text,
@@ -520,24 +566,24 @@ fun SystemReadinessBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .padding(horizontal = 9.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.VerifiedUser,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                     Text(
                         text = strings.systemReadyBadge,
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -556,7 +602,7 @@ fun SystemReadinessBar(
                         imageVector = Icons.Rounded.ChevronRight,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(14.dp)
                     )
                 }
             }
@@ -589,15 +635,16 @@ fun PermissionChecklistCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f))
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(9.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Icon(
                     imageVector = Icons.Rounded.WarningAmber,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.tertiary
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(16.dp)
                 )
                 Text(
                     text = strings.permissionsCardTitle,
@@ -606,7 +653,7 @@ fun PermissionChecklistCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             PermissionRowItem(
                 icon = Icons.Rounded.Layers,
@@ -619,7 +666,7 @@ fun PermissionChecklistCard(
                 onClick = onRequestOverlay
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(5.dp))
 
             PermissionRowItem(
                 icon = Icons.Rounded.NotificationsActive,
@@ -653,20 +700,20 @@ private fun PermissionRowItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = if (granted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(17.dp)
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(7.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Text(
                         text = title,
@@ -689,11 +736,11 @@ private fun PermissionRowItem(
                             } else {
                                 MaterialTheme.colorScheme.onTertiaryContainer
                             },
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
@@ -701,19 +748,23 @@ private fun PermissionRowItem(
                 )
             }
             if (!granted) {
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 FilledTonalButton(
                     onClick = onClick,
-                    modifier = Modifier.testTag(testTag),
+                    contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp),
+                    modifier = Modifier
+                        .height(34.dp)
+                        .testTag(testTag),
                     shape = MaterialTheme.shapes.small
                 ) {
-                    Text(text = actionText, style = MaterialTheme.typography.labelLarge)
+                    Text(text = actionText, style = MaterialTheme.typography.labelMedium)
                 }
             } else {
                 Icon(
                     imageVector = Icons.Rounded.CheckCircle,
                     contentDescription = badgeText,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -744,7 +795,7 @@ fun LivePocketSensorCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(9.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -752,13 +803,14 @@ fun LivePocketSensorCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Sensors,
                         contentDescription = null,
-                        tint = sensorColor
+                        tint = sensorColor,
+                        modifier = Modifier.size(16.dp)
                     )
                     Text(
                         text = strings.sensorCardTitle,
@@ -769,38 +821,38 @@ fun LivePocketSensorCard(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (runtime.hasProximitySensor) {
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(6.dp),
                             color = sensorColor.copy(alpha = 0.14f)
                         ) {
                             Text(
                                 text = "${String.format("%.1f", runtime.proximityDistanceCm)} cm",
-                                style = MaterialTheme.typography.labelMedium,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = sensorColor,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
                     }
                     if (onOpenPocketSettings != null) {
                         IconButton(
                             onClick = onOpenPocketSettings,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(26.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Tune,
                                 contentDescription = strings.btnCustomize,
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(15.dp)
                             )
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             if (runtime.hasProximitySensor) {
                 val maxRange = runtime.proximityMaxRangeCm.coerceAtLeast(1f)
@@ -815,7 +867,7 @@ fun LivePocketSensorCard(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -829,17 +881,17 @@ fun LivePocketSensorCard(
                             )
                             Box(
                                 modifier = Modifier
-                                    .size(12.dp)
+                                    .size(9.dp)
                                     .clip(CircleShape)
                                     .background(sensorColor)
                             )
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         LinearProgressIndicator(
                             progress = { animatedCloseness },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(6.dp)
+                                .height(4.dp)
                                 .clip(RoundedCornerShape(50)),
                             color = sensorColor,
                             trackColor = sensorColor.copy(alpha = 0.16f)
@@ -855,10 +907,10 @@ fun LivePocketSensorCard(
             }
 
             // Orientation & Context Badges
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 if (runtime.hasAccelerometer) {
                     val orientationText = when {
@@ -879,7 +931,7 @@ fun LivePocketSensorCard(
                             text = orientationText,
                             style = MaterialTheme.typography.labelSmall,
                             color = orientationColor,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
@@ -893,7 +945,7 @@ fun LivePocketSensorCard(
                             text = strings.dashFlipRuleActiveBadge,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
@@ -907,7 +959,7 @@ fun LivePocketSensorCard(
                             text = strings.sensorPausedLandscape,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
@@ -921,14 +973,57 @@ fun LivePocketSensorCard(
                             text = strings.sensorPausedCharging,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                if (settings.lowBatteryBlackoutPercent > 0) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            text = "${strings.badgeBatteryGuard} ≤${settings.lowBatteryBlackoutPercent}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                if (settings.shakeToLockEnabled || settings.shakeToUnlockEnabled) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                    ) {
+                        Text(
+                            text = strings.badgeShakeReady,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                val watchedPkg = runtime.activeWatchedApp
+                if (!watchedPkg.isNullOrBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                    ) {
+                        Text(
+                            text = "${strings.badgeAppWatchActive}: ${watchedPkg.substringAfterLast('.')}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
             }
 
             if (runtime.hasProximitySensor) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = strings.sensorTestHint,
                     style = MaterialTheme.typography.bodySmall,
@@ -947,6 +1042,11 @@ fun SettingToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     testTag: String,
+    helpTopic: SettingHelpTopic? = null,
+    isPro: Boolean = false,
+    proBadgeLabel: String = "PRO",
+    helpContentDesc: String = "Help",
+    onHelpClick: ((SettingHelpTopic) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -954,11 +1054,11 @@ fun SettingToggleRow(
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.small)
             .clickable { onCheckedChange(!checked) }
-            .padding(horizontal = 4.dp, vertical = 10.dp),
+            .padding(horizontal = 2.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
-            modifier = Modifier.size(40.dp),
+            modifier = Modifier.size(28.dp),
             shape = MaterialTheme.shapes.small,
             color = if (checked) {
                 MaterialTheme.colorScheme.primaryContainer
@@ -975,33 +1075,52 @@ fun SettingToggleRow(
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (isPro) {
+                    ProFeatureBadge(label = proBadgeLabel)
+                }
+            }
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Spacer(modifier = Modifier.width(10.dp))
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            modifier = Modifier.testTag(testTag),
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                checkedTrackColor = MaterialTheme.colorScheme.primary
+        if (helpTopic != null && onHelpClick != null) {
+            Spacer(modifier = Modifier.width(4.dp))
+            HelpInfoIconButton(
+                contentDescription = helpContentDesc,
+                onClick = { onHelpClick(helpTopic) },
+                modifier = Modifier.testTag("help_${testTag}")
             )
-        )
+        }
+        Spacer(modifier = Modifier.width(6.dp))
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 32.dp) {
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                modifier = Modifier.testTag(testTag),
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary
+                )
+            )
+        }
     }
 }
 
@@ -1017,6 +1136,7 @@ fun InAppLockSandboxDialog(
     var dummyClicks by remember { mutableIntStateOf(0) }
     var showBlockedBanner by remember { mutableStateOf(false) }
     var showHud by remember { mutableStateOf(true) }
+    var quickPeekActive by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
 
     val infiniteTransition = rememberInfiniteTransition(label = "sandboxPulse")
@@ -1034,6 +1154,13 @@ fun InAppLockSandboxDialog(
         if (showBlockedBanner) {
             delay(1500)
             showBlockedBanner = false
+        }
+    }
+
+    LaunchedEffect(quickPeekActive) {
+        if (quickPeekActive) {
+            delay(3000L)
+            quickPeekActive = false
         }
     }
 
@@ -1056,7 +1183,7 @@ fun InAppLockSandboxDialog(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(20.dp),
+                    .padding(12.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
@@ -1097,13 +1224,13 @@ fun InAppLockSandboxDialog(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                 ) {
                     Column(
-                        modifier = Modifier.padding(20.dp),
+                        modifier = Modifier.padding(12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(190.dp)
+                                .height(145.dp)
                                 .clip(MaterialTheme.shapes.medium)
                                 .background(
                                     Brush.linearGradient(
@@ -1119,28 +1246,29 @@ fun InAppLockSandboxDialog(
                                 imageVector = Icons.Rounded.PhotoLibrary,
                                 contentDescription = strings.sandboxDummyPhotoTitle,
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(64.dp)
+                                modifier = Modifier.size(52.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(
                             text = strings.sandboxDummyPhotoTitle,
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = strings.sandboxDummyPhotoDesc,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         OutlinedButton(
                             onClick = { dummyClicks++ },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(48.dp)
+                                .height(40.dp)
                                 .testTag("sandbox_underlying_button")
                         ) {
                             Text("${strings.sandboxTryClicking} ($dummyClicks)")
@@ -1152,16 +1280,18 @@ fun InAppLockSandboxDialog(
                     onClick = {
                         sandboxLocked = true
                         showHud = true
+                        quickPeekActive = false
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
+                        .height(44.dp)
                         .testTag("sandbox_activate_lock_button"),
                     shape = MaterialTheme.shapes.medium
                 ) {
-                    Icon(Icons.Rounded.Lock, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(strings.sandboxLockTriggerBtn)
                 }
             }
@@ -1171,16 +1301,26 @@ fun InAppLockSandboxDialog(
                 enter = fadeIn(tween(200)),
                 exit = fadeOut(tween(200))
             ) {
-                val dimAlpha = (settings.customDimPercent.coerceIn(0, 95) / 100f)
+                val effectiveDim = when {
+                    quickPeekActive -> 12
+                    settings.privacyVeilEnabled -> 99
+                    else -> settings.customDimPercent.coerceIn(0, 95)
+                }
+                val dimAlpha = effectiveDim / 100f
                 val overlayColor = if (dimAlpha == 0f) {
                     Color.Transparent
                 } else {
                     Color(0xFF05080E).copy(alpha = dimAlpha)
                 }
                 val accentColor = Color(settings.borderColor.colorArgb)
+                val stealthHidden = settings.stealthBlackoutEnabled && !quickPeekActive
+                val isPartial = settings.partialZoneEnabled && settings.partialZonePreset != PartialZonePreset.FULL_LOCK
+                val cutoutNorm = remember(settings.partialZonePreset, settings.partialZoneRect) {
+                    PartialZoneGeometry.resolveNormalizedRect(settings.partialZonePreset, settings.partialZoneRect)
+                }
                 val effectiveBorderAlpha = if (settings.borderPulseEnabled) pulseAlpha else 0.8f
 
-                Box(
+                BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(overlayColor)
@@ -1195,7 +1335,35 @@ fun InAppLockSandboxDialog(
                             )
                         }
                 ) {
-                    if (settings.borderEnabled) {
+                    val boxW = maxWidth
+                    val boxH = maxHeight
+
+                    if (isPartial) {
+                        val cw = (boxW * (cutoutNorm.right - cutoutNorm.left)).coerceAtLeast(36.dp)
+                        val ch = (boxH * (cutoutNorm.bottom - cutoutNorm.top)).coerceAtLeast(36.dp)
+                        Box(
+                            modifier = Modifier
+                                .offset(x = boxW * cutoutNorm.left, y = boxH * cutoutNorm.top)
+                                .width(cw)
+                                .height(ch)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(accentColor.copy(alpha = 0.14f))
+                                .border(2.dp, accentColor, RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = strings.overlayPartialZoneBadge,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Color(0xB80F172A))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+
+                    if (settings.borderEnabled && !stealthHidden && !isPartial) {
                         if (settings.borderStyle == BorderStyle.FULL_GLOW) {
                             Box(
                                 modifier = Modifier
@@ -1226,7 +1394,7 @@ fun InAppLockSandboxDialog(
                         }
                     }
 
-                    if (settings.oledClockEnabled) {
+                    if (settings.oledClockEnabled && !stealthHidden && !isPartial) {
                         val clockStr = remember {
                             SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
                         }
@@ -1243,7 +1411,7 @@ fun InAppLockSandboxDialog(
                         }
                     }
 
-                    val showTopBadge = when (settings.badgeVisibilityMode) {
+                    val showTopBadge = !stealthHidden && when (settings.badgeVisibilityMode) {
                         BadgeVisibilityMode.ALWAYS -> true
                         BadgeVisibilityMode.ON_TOUCH -> showHud || showBlockedBanner
                         BadgeVisibilityMode.HIDDEN -> showBlockedBanner
@@ -1255,7 +1423,7 @@ fun InAppLockSandboxDialog(
                         exit = fadeOut(),
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = 18.dp)
+                            .padding(top = 12.dp)
                     ) {
                         Surface(
                             shape = RoundedCornerShape(50),
@@ -1275,7 +1443,7 @@ fun InAppLockSandboxDialog(
                                 },
                                 style = MaterialTheme.typography.labelMedium,
                                 color = Color.White,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                             )
                         }
                     }
@@ -1286,7 +1454,7 @@ fun InAppLockSandboxDialog(
                         exit = fadeOut(tween(260)),
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(bottom = 44.dp, start = 24.dp, end = 24.dp)
+                            .padding(bottom = 20.dp, start = 14.dp, end = 14.dp)
                     ) {
                         Surface(
                             shape = MaterialTheme.shapes.large,
@@ -1295,7 +1463,7 @@ fun InAppLockSandboxDialog(
                             shadowElevation = 12.dp
                         ) {
                             Column(
-                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 18.dp),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
@@ -1303,7 +1471,7 @@ fun InAppLockSandboxDialog(
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = strings.overlayUnlockHint(
                                         settings.unlockMethod,
@@ -1313,7 +1481,7 @@ fun InAppLockSandboxDialog(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center
                                 )
-                                Spacer(modifier = Modifier.height(14.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
 
                                 when (settings.unlockMethod) {
                                     UnlockMethod.LONG_PRESS -> SandboxHoldUnlockButton(
@@ -1347,6 +1515,8 @@ fun InAppLockSandboxDialog(
                                         strings = strings,
                                         biometricEnabled = settings.biometricUnlockEnabled,
                                         emergencyBypassEnabled = settings.emergencyHoldBypassEnabled,
+                                        kidsSafetyEnabled = settings.kidsSafetyEnabled,
+                                        wrongAttemptCooldownEnabled = settings.wrongAttemptCooldownEnabled,
                                         onWrongPin = {
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         },
@@ -1355,6 +1525,24 @@ fun InAppLockSandboxDialog(
                                             sandboxLocked = false
                                         }
                                     )
+                                }
+
+                                if (settings.privacyVeilEnabled || settings.customDimPercent >= 65) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    OutlinedButton(
+                                        onClick = {
+                                            quickPeekActive = true
+                                            showHud = true
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                        modifier = Modifier.height(30.dp),
+                                        shape = RoundedCornerShape(50)
+                                    ) {
+                                        Text(
+                                            text = "👁 ${strings.overlayBtnQuickPeek}",
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
                                 }
                             }
                         }

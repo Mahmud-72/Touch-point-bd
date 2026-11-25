@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,12 +28,13 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -45,7 +47,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.service.WrongAttemptCooldownTracker
 import com.example.ui.AppStrings
+import kotlinx.coroutines.delay
 
 @Composable
 fun SandboxPinUnlockPad(
@@ -54,14 +58,32 @@ fun SandboxPinUnlockPad(
     strings: AppStrings,
     biometricEnabled: Boolean = false,
     emergencyBypassEnabled: Boolean = false,
+    kidsSafetyEnabled: Boolean = false,
+    wrongAttemptCooldownEnabled: Boolean = true,
     onWrongPin: () -> Unit,
     onUnlocked: () -> Unit
 ) {
     var entered by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
+    val cooldownTracker = remember { WrongAttemptCooldownTracker() }
+    var cooldownRemaining by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(cooldownRemaining) {
+        if (cooldownRemaining > 0) {
+            delay(1000L)
+            cooldownRemaining = cooldownTracker.remainingCooldownSeconds()
+        }
+    }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        if (isError) {
+        if (cooldownRemaining > 0) {
+            Text(
+                text = strings.overlayPinCooldownWait(cooldownRemaining),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+        } else if (isError) {
             Text(
                 text = strings.overlayPinWrong,
                 style = MaterialTheme.typography.bodySmall,
@@ -96,18 +118,19 @@ fun SandboxPinUnlockPad(
             listOf("C", "0", "⌫")
         )
 
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             rows.forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     row.forEach { key ->
                         Surface(
                             modifier = Modifier
-                                .width(58.dp)
-                                .height(44.dp),
-                            shape = RoundedCornerShape(12.dp),
+                                .width(52.dp)
+                                .height(40.dp),
+                            shape = RoundedCornerShape(10.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                             onClick = {
+                                if (cooldownRemaining > 0) return@Surface
                                 when (key) {
                                     "C" -> {
                                         entered = ""
@@ -128,10 +151,18 @@ fun SandboxPinUnlockPad(
                                             if (next.length == 4) {
                                                 if (next == expectedPin) {
                                                     entered = ""
+                                                    cooldownTracker.reset()
+                                                    cooldownRemaining = 0
                                                     onUnlocked()
                                                 } else {
                                                     entered = ""
                                                     isError = true
+                                                    if (wrongAttemptCooldownEnabled) {
+                                                        val sec = cooldownTracker.recordWrongAttempt()
+                                                        if (sec > 0) {
+                                                            cooldownRemaining = cooldownTracker.remainingCooldownSeconds()
+                                                        }
+                                                    }
                                                     onWrongPin()
                                                 }
                                             } else {
@@ -157,18 +188,19 @@ fun SandboxPinUnlockPad(
         }
 
         if (biometricEnabled) {
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             FilledTonalButton(
                 onClick = onUnlocked,
-                modifier = Modifier.height(40.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier.height(34.dp),
                 shape = RoundedCornerShape(50)
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Fingerprint,
                     contentDescription = strings.overlayBtnBiometric,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(5.dp))
                 Text(
                     text = strings.overlayBtnBiometric,
                     style = MaterialTheme.typography.labelMedium
@@ -176,8 +208,8 @@ fun SandboxPinUnlockPad(
             }
         }
 
-        if (emergencyBypassEnabled) {
-            Spacer(modifier = Modifier.height(8.dp))
+        if (emergencyBypassEnabled && !kidsSafetyEnabled) {
+            Spacer(modifier = Modifier.height(6.dp))
             var holdingEmergency by remember { mutableStateOf(false) }
             val holdProgress by animateFloatAsState(
                 targetValue = if (holdingEmergency) 1f else 0f,
@@ -192,7 +224,7 @@ fun SandboxPinUnlockPad(
             )
             Surface(
                 modifier = Modifier
-                    .width(196.dp)
+                    .width(188.dp)
                     .pointerInput(Unit) {
                         detectTapGestures(
                             onPress = {
@@ -207,7 +239,7 @@ fun SandboxPinUnlockPad(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f))
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Row(
@@ -262,17 +294,14 @@ fun ChangePinDialog(
         },
         text = {
             Column {
-                OutlinedTextField(
+                CompactTextInputBox(
                     value = pinInput,
                     onValueChange = { raw ->
                         pinInput = raw.filter { it.isDigit() }.take(4)
                     },
-                    label = { Text(strings.pinDialogHint) },
-                    singleLine = true,
+                    placeholder = strings.pinDialogHint,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("pin_input_field")
+                    modifier = Modifier.testTag("pin_input_field")
                 )
             }
         },
@@ -285,13 +314,20 @@ fun ChangePinDialog(
                     }
                 },
                 enabled = pinInput.length == 4,
-                modifier = Modifier.testTag("pin_save_button")
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                modifier = Modifier
+                    .height(36.dp)
+                    .testTag("pin_save_button")
             ) {
                 Text(strings.btnSave)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier.height(36.dp)
+            ) {
                 Text(strings.btnCancel)
             }
         }
@@ -313,14 +349,11 @@ fun SaveProfileDialog(
         onDismissRequest = onDismiss,
         title = { Text(text = title, style = MaterialTheme.typography.titleLarge) },
         text = {
-            OutlinedTextField(
+            CompactTextInputBox(
                 value = name,
                 onValueChange = { name = it.take(24) },
-                label = { Text(hint) },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("profile_name_input")
+                placeholder = hint,
+                modifier = Modifier.testTag("profile_name_input")
             )
         },
         confirmButton = {
@@ -333,13 +366,20 @@ fun SaveProfileDialog(
                     }
                 },
                 enabled = name.trim().isNotEmpty(),
-                modifier = Modifier.testTag("profile_save_button")
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                modifier = Modifier
+                    .height(36.dp)
+                    .testTag("profile_save_button")
             ) {
                 Text(strings.btnSave)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier.height(36.dp)
+            ) {
                 Text(strings.btnCancel)
             }
         }
@@ -360,15 +400,23 @@ fun ConfirmationDialog(
         title = { Text(title, style = MaterialTheme.typography.titleLarge) },
         text = { Text(message, style = MaterialTheme.typography.bodyMedium) },
         confirmButton = {
-            Button(onClick = {
-                onConfirm()
-                onDismiss()
-            }) {
+            Button(
+                onClick = {
+                    onConfirm()
+                    onDismiss()
+                },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                modifier = Modifier.height(36.dp)
+            ) {
                 Text(confirmLabel)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier.height(36.dp)
+            ) {
                 Text(cancelLabel)
             }
         }

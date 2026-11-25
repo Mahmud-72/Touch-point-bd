@@ -29,10 +29,13 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.R
+import com.example.data.AppWatchAction
 import com.example.data.LockSource
 import com.example.data.ShieldPreferences
 import com.example.data.ShieldSettings
 import com.example.data.ShieldStateHolder
+import com.example.data.UnlockMethod
+import com.example.data.VolumeShortcutAction
 import com.example.sensor.PocketSensorManager
 import com.example.ui.getAppStrings
 import kotlinx.coroutines.CoroutineScope
@@ -53,11 +56,15 @@ class TouchShieldService : Service() {
     private lateinit var preferences: ShieldPreferences
     private lateinit var overlayController: OverlayWindowController
     private lateinit var pocketSensorManager: PocketSensorManager
+    private lateinit var appWatchMonitor: AppWatchMonitor
+    private lateinit var volumeShortcutMonitor: VolumeShortcutMonitor
     private lateinit var notificationManager: NotificationManager
 
     private var latestSettings = ShieldSettings()
     private var settingsLoaded = false
     private var isForegroundStarted = false
+    private var initializedChargingState = false
+    private var lastKnownCharging = false
 
     private var countdownJob: Job? = null
     private var sessionTimerRunnable: Runnable? = null
@@ -120,6 +127,7 @@ class TouchShieldService : Service() {
             onPocketUnlockTriggered = {
                 val state = ShieldStateHolder.runtimeState.value
                 if (state.isScreenLocked &&
+                    !state.isKidsTimeUpLocked &&
                     state.lockSource == LockSource.POCKET_SENSOR &&
                     latestSettings.pocketAutoUnlockEnabled
                 ) {
@@ -133,6 +141,82 @@ class TouchShieldService : Service() {
                 ) {
                     cancelCountdown()
                     lockScreenImmediately(LockSource.FLIP_GESTURE)
+                }
+            },
+            onShakeDetected = {
+                val state = ShieldStateHolder.runtimeState.value
+                if (!state.isScreenLocked && latestSettings.shakeToLockEnabled) {
+                    cancelCountdown()
+                    lockScreenImmediately(LockSource.SHAKE_GESTURE)
+                } else if (state.isScreenLocked &&
+                    latestSettings.shakeToUnlockEnabled &&
+                    !latestSettings.kidsSafetyEnabled &&
+                    !state.isKidsTimeUpLocked
+                ) {
+                    unlockedByCall = false
+                    unlockScreen()
+                }
+            }
+        )
+
+        appWatchMonitor = AppWatchMonitor(
+            context = applicationContext,
+            onWatchedAppEntered = { pkg ->
+                ShieldStateHolder.setActiveWatchedApp(pkg)
+                when (latestSettings.appWatchAction) {
+                    AppWatchAction.SHOW_BUBBLE -> {
+                        if (ShieldStateHolder.runtimeState.value.isBubbleTemporarilyHidden) {
+                            ShieldStateHolder.setBubbleTemporarilyHidden(false)
+                        }
+                        syncOverlayState()
+                        refreshNotification()
+                    }
+                    AppWatchAction.AUTO_LOCK -> {
+                        if (!ShieldStateHolder.runtimeState.value.isScreenLocked) {
+                            cancelCountdown()
+                            lockScreenImmediately(LockSource.APP_WATCH)
+                        }
+                    }
+                }
+            },
+            onWatchedAppExited = {
+                ShieldStateHolder.setActiveWatchedApp(null)
+                val runtime = ShieldStateHolder.runtimeState.value
+                if (latestSettings.appWatchAutoDisarmOnExit &&
+                    runtime.isScreenLocked &&
+                    runtime.lockSource == LockSource.APP_WATCH &&
+                    !runtime.isKidsTimeUpLocked
+                ) {
+                    unlockedByCall = false
+                    unlockScreen()
+                }
+            }
+        )
+
+        volumeShortcutMonitor = VolumeShortcutMonitor(
+            context = applicationContext,
+            onVolumeDoublePress = {
+                val runtime = ShieldStateHolder.runtimeState.value
+                val kidsPinProtected =
+                    runtime.isKidsTimeUpLocked ||
+                        (latestSettings.kidsSafetyEnabled && latestSettings.unlockMethod == UnlockMethod.PIN)
+                when (latestSettings.volumeDoublePressAction) {
+                    VolumeShortcutAction.TOGGLE_LOCK -> {
+                        if (!runtime.isScreenLocked) {
+                            cancelCountdown()
+                            lockScreenImmediately(LockSource.VOLUME_SHORTCUT)
+                        } else if (!kidsPinProtected) {
+                            unlockedByCall = false
+                            unlockScreen()
+                        }
+                    }
+                    VolumeShortcutAction.UNLOCK_ONLY -> {
+                        if (runtime.isScreenLocked && !kidsPinProtected) {
+                            unlockedByCall = false
+                            unlockScreen()
+                        }
+                    }
+                    VolumeShortcutAction.OFF -> Unit
                 }
             }
         )
@@ -165,15 +249,30 @@ class TouchShieldService : Service() {
                     orientationFilter = settings.pocketOrientationFilterEnabled,
                     pauseLandscape = settings.pausePocketInLandscape,
                     pauseCharging = settings.pausePocketWhileCharging,
-                    flipFaceDown = settings.flipFaceDownLockEnabled
+                    flipFaceDown = settings.flipFaceDownLockEnabled,
+                    shakeDetection = settings.shakeToLockEnabled || settings.shakeToUnlockEnabled,
+                    shakeThreshold = settings.shakeSensitivity.gThreshold
                 )
-                if (settings.pocketAutoLockEnabled || settings.flipFaceDownLockEnabled) {
+                val needsAccelerometerOrProx = settings.pocketAutoLockEnabled ||
+                    settings.flipFaceDownLockEnabled ||
+                    settings.shakeToLockEnabled ||
+                    settings.shakeToUnlockEnabled
+                if (needsAccelerometerOrProx) {
                     pocketSensorManager.startListening()
                 } else {
                     pocketSensorManager.stopListening()
                 }
 
+                appWatchMonitor.updateConfig(
+                    enabled = settings.appWatchEnabled,
+                    packages = settings.watchedAppPackages
+                )
+                volumeShortcutMonitor.updateEnabled(
+                    shouldEnable = settings.volumeDoublePressAction != VolumeShortcutAction.OFF
+                )
+
                 updateCallStateObserver(settings.autoUnlockOnCallEnabled)
+                evaluateLowBatteryBlackout()
                 syncOverlayState()
                 refreshNotification()
             }
@@ -246,8 +345,11 @@ class TouchShieldService : Service() {
         cancelCountdown()
         cancelSessionTimer()
         unregisterCallStateObserver()
+        appWatchMonitor.stop()
+        volumeShortcutMonitor.stop()
         overlayController.removeAllOverlays()
         pocketSensorManager.stopListening()
+        ShieldStateHolder.setActiveWatchedApp(null)
         ShieldStateHolder.setServiceRunning(false)
         TouchLockWidgetProvider.updateAllWidgets(applicationContext)
         requestTileRefresh()
@@ -265,10 +367,21 @@ class TouchShieldService : Service() {
     }
 
     private fun syncPowerContext(intent: Intent?) {
-        val batteryIntent = intent ?: registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val action = intent?.action
+        val batteryIntent = if (action == Intent.ACTION_BATTERY_CHANGED) {
+            intent
+        } else {
+            registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        }
         val status = batteryIntent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
-        val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
-            status == BatteryManager.BATTERY_STATUS_FULL
+        val plugged = batteryIntent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
+        val isCharging = when (action) {
+            Intent.ACTION_POWER_CONNECTED -> true
+            Intent.ACTION_POWER_DISCONNECTED -> false
+            else -> status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                status == BatteryManager.BATTERY_STATUS_FULL ||
+                plugged != 0
+        }
         val level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
         val scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
         val pct = if (level >= 0 && scale > 0) ((level * 100f) / scale).toInt().coerceIn(0, 100) else 100
@@ -276,6 +389,41 @@ class TouchShieldService : Service() {
         val isLandscape = ShieldStateHolder.runtimeState.value.isLandscape
         ShieldStateHolder.updateDeviceContext(isCharging = isCharging, batteryPercent = pct)
         pocketSensorManager.updateContextState(landscape = isLandscape, charging = isCharging)
+
+        if (initializedChargingState && settingsLoaded) {
+            val runtime = ShieldStateHolder.runtimeState.value
+            val pluggedInEvent = (!lastKnownCharging && isCharging) || action == Intent.ACTION_POWER_CONNECTED
+            val unpluggedEvent = (lastKnownCharging && !isCharging) || action == Intent.ACTION_POWER_DISCONNECTED
+
+            if (pluggedInEvent && !runtime.isScreenLocked && latestSettings.autoLockOnChargerConnect) {
+                cancelCountdown()
+                lockScreenImmediately(LockSource.CHARGER_RULE)
+            } else if (unpluggedEvent && runtime.isScreenLocked && !runtime.isKidsTimeUpLocked &&
+                latestSettings.unlockOnChargerDisconnect
+            ) {
+                unlockedByCall = false
+                unlockScreen()
+            }
+        }
+        lastKnownCharging = isCharging
+        initializedChargingState = true
+
+        if (settingsLoaded) {
+            evaluateLowBatteryBlackout()
+        }
+    }
+
+    private fun evaluateLowBatteryBlackout() {
+        val runtime = ShieldStateHolder.runtimeState.value
+        val threshold = latestSettings.lowBatteryBlackoutPercent
+        val active = runtime.isScreenLocked &&
+            threshold > 0 &&
+            runtime.batteryPercent <= threshold &&
+            !runtime.isCharging
+        if (active != runtime.isLowBatteryBlackoutActive) {
+            ShieldStateHolder.setLowBatteryBlackoutActive(active)
+            syncOverlayState()
+        }
     }
 
     private fun initiateLock(source: LockSource) {
@@ -284,7 +432,14 @@ class TouchShieldService : Service() {
         unlockedByCall = false
 
         val delaySec = latestSettings.lockCountdownSeconds
-        if (delaySec <= 0 || source == LockSource.POCKET_SENSOR || source == LockSource.FLIP_GESTURE) {
+        if (delaySec <= 0 ||
+            source == LockSource.POCKET_SENSOR ||
+            source == LockSource.FLIP_GESTURE ||
+            source == LockSource.SHAKE_GESTURE ||
+            source == LockSource.VOLUME_SHORTCUT ||
+            source == LockSource.CHARGER_RULE ||
+            source == LockSource.APP_WATCH
+        ) {
             lockScreenImmediately(source)
             return
         }
@@ -313,7 +468,9 @@ class TouchShieldService : Service() {
         if (!Settings.canDrawOverlays(this)) return
         if (ShieldStateHolder.runtimeState.value.isScreenLocked) return
 
+        ShieldStateHolder.setKidsTimeUpLocked(false)
         ShieldStateHolder.setScreenLocked(true, source)
+        evaluateLowBatteryBlackout()
         syncOverlayState()
         serviceScope.launch(Dispatchers.IO) {
             preferences.incrementLockSessions(source)
@@ -326,6 +483,8 @@ class TouchShieldService : Service() {
 
     private fun unlockScreen() {
         cancelSessionTimer()
+        ShieldStateHolder.setKidsTimeUpLocked(false)
+        ShieldStateHolder.setLowBatteryBlackoutActive(false)
         ShieldStateHolder.setScreenLocked(false, LockSource.NONE)
         syncOverlayState()
         refreshNotification()
@@ -339,7 +498,9 @@ class TouchShieldService : Service() {
             settings = latestSettings,
             isServiceArmed = runtime.isServiceRunning,
             isScreenLocked = runtime.isScreenLocked,
-            isBubbleTemporarilyHidden = runtime.isBubbleTemporarilyHidden
+            isBubbleTemporarilyHidden = runtime.isBubbleTemporarilyHidden,
+            isLowBatteryBlackoutActive = runtime.isLowBatteryBlackoutActive,
+            isKidsTimeUpLocked = runtime.isKidsTimeUpLocked
         )
     }
 
@@ -349,8 +510,15 @@ class TouchShieldService : Service() {
         if (minutes <= 0) return
         val runnable = Runnable {
             if (ShieldStateHolder.runtimeState.value.isScreenLocked) {
-                unlockedByCall = false
-                unlockScreen()
+                if (latestSettings.kidsLockOnTimerExpiry) {
+                    ShieldStateHolder.setKidsTimeUpLocked(true)
+                    ShieldStateHolder.setScreenLocked(true, LockSource.KIDS_TIMEOUT)
+                    syncOverlayState()
+                    refreshNotification()
+                } else {
+                    unlockedByCall = false
+                    unlockScreen()
+                }
             }
         }
         sessionTimerRunnable = runnable
@@ -366,7 +534,7 @@ class TouchShieldService : Service() {
         val runtime = ShieldStateHolder.runtimeState.value
         when (state) {
             TelephonyManager.CALL_STATE_RINGING -> {
-                if (runtime.isScreenLocked) {
+                if (runtime.isScreenLocked && !runtime.isKidsTimeUpLocked) {
                     previousCallLockSource = runtime.lockSource
                     unlockedByCall = true
                     unlockScreen()
@@ -450,10 +618,13 @@ class TouchShieldService : Service() {
         cancelCountdown()
         cancelSessionTimer()
         unregisterCallStateObserver()
+        appWatchMonitor.stop()
+        volumeShortcutMonitor.stop()
         serviceScope.launch {
             preferences.setArmed(false)
         }
         overlayController.removeAllOverlays()
+        ShieldStateHolder.setActiveWatchedApp(null)
         ShieldStateHolder.setServiceRunning(false)
         TouchLockWidgetProvider.updateAllWidgets(applicationContext)
         requestTileRefresh()

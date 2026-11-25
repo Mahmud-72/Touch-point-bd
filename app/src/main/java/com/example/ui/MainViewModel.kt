@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AppLanguage
+import com.example.data.AppWatchAction
 import com.example.data.BadgeVisibilityMode
 import com.example.data.BorderColorOption
 import com.example.data.BorderStyle
@@ -24,7 +25,10 @@ import com.example.data.BorderThickness
 import com.example.data.BubbleSize
 import com.example.data.BubbleStyle
 import com.example.data.LockSource
+import com.example.data.NormalizedRect
 import com.example.data.OverlayStyle
+import com.example.data.PartialZonePreset
+import com.example.data.ShakeSensitivity
 import com.example.data.ShieldPreferences
 import com.example.data.ShieldRuntimeState
 import com.example.data.ShieldSettings
@@ -32,8 +36,11 @@ import com.example.data.ShieldStateHolder
 import com.example.data.SmartPreset
 import com.example.data.ThemeMode
 import com.example.data.UnlockMethod
+import com.example.data.VolumeShortcutAction
 import com.example.sensor.PocketSensorManager
+import com.example.service.AppWatchMonitor
 import com.example.service.TouchShieldService
+import com.example.service.WatchedAppInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,14 +58,16 @@ data class PermissionStatus(
     val hasOverlayPermission: Boolean = false,
     val hasNotificationPermission: Boolean = true,
     val hasPhoneStatePermission: Boolean = false,
-    val isIgnoringBatteryOptimizations: Boolean = false
+    val isIgnoringBatteryOptimizations: Boolean = false,
+    val hasUsageAccessPermission: Boolean = false
 )
 
 data class MainUiState(
     val settings: ShieldSettings = ShieldSettings(),
     val runtime: ShieldRuntimeState = ShieldRuntimeState(),
     val permissions: PermissionStatus = PermissionStatus(),
-    val isSandboxOpen: Boolean = false
+    val isSandboxOpen: Boolean = false,
+    val installedSelectableApps: List<WatchedAppInfo> = AppWatchMonitor.POPULAR_PRESET_APPS
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -67,6 +76,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = ShieldPreferences(appContext)
     private val permissionFlow = MutableStateFlow(readPermissions())
     private val sandboxOpenFlow = MutableStateFlow(false)
+    private val selectableAppsFlow = MutableStateFlow(AppWatchMonitor.POPULAR_PRESET_APPS)
+    private var loadedInstalledApps = false
 
     private val _snackbarEvents = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val snackbarEvents: SharedFlow<String> = _snackbarEvents.asSharedFlow()
@@ -90,13 +101,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         preferences.settingsFlow,
         ShieldStateHolder.runtimeState,
         permissionFlow,
-        sandboxOpenFlow
-    ) { settings, runtime, permissions, sandboxOpen ->
+        sandboxOpenFlow,
+        selectableAppsFlow
+    ) { settings, runtime, permissions, sandboxOpen, selectableApps ->
         MainUiState(
             settings = settings,
             runtime = runtime,
             permissions = permissions,
-            isSandboxOpen = sandboxOpen
+            isSandboxOpen = sandboxOpen,
+            installedSelectableApps = selectableApps
         )
     }.stateIn(
         scope = viewModelScope,
@@ -125,7 +138,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     orientationFilter = settings.pocketOrientationFilterEnabled,
                     pauseLandscape = settings.pausePocketInLandscape,
                     pauseCharging = settings.pausePocketWhileCharging,
-                    flipFaceDown = false
+                    flipFaceDown = false,
+                    shakeDetection = false,
+                    shakeThreshold = settings.shakeSensitivity.gThreshold
                 )
             }
         }
@@ -140,6 +155,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshPermissions() {
         permissionFlow.value = readPermissions()
         refreshContextSnapshot()
+    }
+
+    fun loadSelectableAppsIfNeeded() {
+        if (loadedInstalledApps) return
+        loadedInstalledApps = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val loaded = runCatching { AppWatchMonitor.loadSelectableApps(appContext) }
+                .getOrDefault(AppWatchMonitor.POPULAR_PRESET_APPS)
+            selectableAppsFlow.value = loaded
+        }
     }
 
     fun refreshContextSnapshot() {
@@ -221,6 +246,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { preferences.setHudTimeoutMs(ms) }
     }
 
+    // Kids Safety & Wrong-PIN Cooldown
+    fun setKidsSafetyEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setKidsSafetyEnabled(enabled) }
+    }
+
+    fun setWrongAttemptCooldownEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setWrongAttemptCooldownEnabled(enabled) }
+    }
+
+    fun setKidsLockOnTimerExpiry(enabled: Boolean) {
+        viewModelScope.launch { preferences.setKidsLockOnTimerExpiry(enabled) }
+    }
+
     // Overlay Visuals & Display
     fun setOverlayStyle(style: OverlayStyle) {
         viewModelScope.launch { preferences.setOverlayStyle(style) }
@@ -260,6 +298,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setOledClockEnabled(enabled: Boolean) {
         viewModelScope.launch { preferences.setOledClockEnabled(enabled) }
+    }
+
+    // Partial Touch Zone & Privacy Veil
+    fun setPartialZoneEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setPartialZoneEnabled(enabled) }
+    }
+
+    fun setPartialZonePreset(preset: PartialZonePreset) {
+        viewModelScope.launch { preferences.setPartialZonePreset(preset) }
+    }
+
+    fun setPartialZoneRect(rect: NormalizedRect) {
+        viewModelScope.launch { preferences.setPartialZoneRect(rect) }
+    }
+
+    fun setPrivacyVeilEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setPrivacyVeilEnabled(enabled) }
+    }
+
+    fun setStealthBlackoutEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setStealthBlackoutEnabled(enabled) }
     }
 
     // Floating Bubble
@@ -328,6 +387,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { preferences.setSessionTimerMinutes(minutes) }
     }
 
+    // App-Watch, Shake/Volume Shortcuts & Power Guard
+    fun setAppWatchEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setAppWatchEnabled(enabled) }
+    }
+
+    fun toggleWatchedAppPackage(packageName: String) {
+        viewModelScope.launch { preferences.toggleWatchedAppPackage(packageName) }
+    }
+
+    fun setAppWatchAction(action: AppWatchAction) {
+        viewModelScope.launch { preferences.setAppWatchAction(action) }
+    }
+
+    fun setAppWatchAutoDisarmOnExit(enabled: Boolean) {
+        viewModelScope.launch { preferences.setAppWatchAutoDisarmOnExit(enabled) }
+    }
+
+    fun setShakeToLockEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setShakeToLockEnabled(enabled) }
+    }
+
+    fun setShakeToUnlockEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setShakeToUnlockEnabled(enabled) }
+    }
+
+    fun setShakeSensitivity(sensitivity: ShakeSensitivity) {
+        viewModelScope.launch { preferences.setShakeSensitivity(sensitivity) }
+    }
+
+    fun setVolumeDoublePressAction(action: VolumeShortcutAction) {
+        viewModelScope.launch { preferences.setVolumeDoublePressAction(action) }
+    }
+
+    fun setLowBatteryBlackoutPercent(percent: Int) {
+        viewModelScope.launch { preferences.setLowBatteryBlackoutPercent(percent) }
+    }
+
+    fun setAutoLockOnChargerConnect(enabled: Boolean) {
+        viewModelScope.launch { preferences.setAutoLockOnChargerConnect(enabled) }
+    }
+
+    fun setUnlockOnChargerDisconnect(enabled: Boolean) {
+        viewModelScope.launch { preferences.setUnlockOnChargerDisconnect(enabled) }
+    }
+
     // System, Appearance, Onboarding & Profiles
     fun setKeepScreenOn(enabled: Boolean) {
         viewModelScope.launch { preferences.setKeepScreenOn(enabled) }
@@ -359,6 +463,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun replayOnboarding() {
         viewModelScope.launch { preferences.setOnboardingCompleted(false) }
+    }
+
+    fun setAdvancedMode(enabled: Boolean) {
+        viewModelScope.launch { preferences.setAdvancedMode(enabled) }
     }
 
     fun applySmartPreset(preset: SmartPreset) {
@@ -451,6 +559,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         runCatching { appContext.startActivity(intent) }
     }
 
+    fun openUsageAccessSettings() {
+        val primary = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                data = Uri.parse("package:${appContext.packageName}")
+            }
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val launched = runCatching { appContext.startActivity(primary) }.isSuccess
+        if (!launched) {
+            val fallback = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            runCatching { appContext.startActivity(fallback) }
+        }
+    }
+
     private fun readPermissions(): PermissionStatus {
         val overlayGranted = Settings.canDrawOverlays(appContext)
         val notifGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -467,11 +591,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ) == PackageManager.PERMISSION_GRANTED
         val powerManager = appContext.getSystemService(Context.POWER_SERVICE) as? PowerManager
         val ignoringBattery = powerManager?.isIgnoringBatteryOptimizations(appContext.packageName) ?: false
+        val usageAccess = AppWatchMonitor.hasUsageStatsPermission(appContext)
         return PermissionStatus(
             hasOverlayPermission = overlayGranted,
             hasNotificationPermission = notifGranted,
             hasPhoneStatePermission = phoneGranted,
-            isIgnoringBatteryOptimizations = ignoringBattery
+            isIgnoringBatteryOptimizations = ignoringBattery,
+            hasUsageAccessPermission = usageAccess
         )
     }
 }

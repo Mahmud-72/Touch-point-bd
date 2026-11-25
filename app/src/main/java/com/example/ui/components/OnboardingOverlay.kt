@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -75,12 +76,12 @@ fun OnboardingOverlay(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.72f))
-                .padding(20.dp),
+                .padding(12.dp),
             contentAlignment = Alignment.Center
         ) {
             Surface(
                 modifier = Modifier
-                    .widthIn(max = 480.dp)
+                    .widthIn(max = 460.dp)
                     .fillMaxWidth(),
                 shape = MaterialTheme.shapes.extraLarge,
                 color = MaterialTheme.colorScheme.surface,
@@ -88,7 +89,7 @@ fun OnboardingOverlay(
                 shadowElevation = 16.dp
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.padding(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Row(
@@ -103,13 +104,16 @@ fun OnboardingOverlay(
                         )
                         TextButton(
                             onClick = onComplete,
-                            modifier = Modifier.testTag("onboarding_skip_button")
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            modifier = Modifier
+                                .height(32.dp)
+                                .testTag("onboarding_skip_button")
                         ) {
                             Text(strings.onboardingSkip)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     AnimatedContent(
                         targetState = step,
@@ -121,28 +125,28 @@ fun OnboardingOverlay(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Surface(
-                                modifier = Modifier.size(96.dp),
+                                modifier = Modifier.size(66.dp),
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.primaryContainer,
-                                border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
+                                border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         imageVector = icon,
                                         contentDescription = title,
                                         tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(44.dp)
+                                        modifier = Modifier.size(32.dp)
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(20.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                             Text(
                                 text = title,
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 textAlign = TextAlign.Center
                             )
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = desc,
                                 style = MaterialTheme.typography.bodyMedium,
@@ -152,10 +156,10 @@ fun OnboardingOverlay(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     // Dots indicator
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         repeat(pages.size) { index ->
                             val active = index == step
                             val dotColor by animateColorAsState(
@@ -168,15 +172,15 @@ fun OnboardingOverlay(
                             )
                             Box(
                                 modifier = Modifier
-                                    .height(8.dp)
-                                    .size(width = if (active) 24.dp else 8.dp, height = 8.dp)
+                                    .height(6.dp)
+                                    .size(width = if (active) 20.dp else 6.dp, height = 6.dp)
                                     .clip(RoundedCornerShape(50))
                                     .background(dotColor)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Button(
                         onClick = {
@@ -186,9 +190,10 @@ fun OnboardingOverlay(
                                 onComplete()
                             }
                         },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(50.dp)
+                            .height(40.dp)
                             .testTag("onboarding_next_button"),
                         shape = MaterialTheme.shapes.medium
                     ) {
